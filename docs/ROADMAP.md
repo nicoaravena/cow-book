@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally.
 
-**Next up:** step 1.3.
+**Next up:** step 1.4.
 
 ## How to work
 
@@ -20,7 +20,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - From M3: exercise the running server with `curl`, with commands given in each step.
 - At the end: the 7.7 run-through in a browser, and a checklist mapping each README rule to the test that proves it.
 
-`make lint` is expected to fail on unused `Booking` and `Member` fields until step 1.4 is done.
+`make lint` is expected to fail on unused `Member` fields until step 1.4 is done.
 
 ## Steps
 
@@ -32,7 +32,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 - [x] **1.1** `NewSpace` and validation. *Go: exported vs unexported, constructors, sentinel errors, table-driven tests.*
 - [x] **1.2** Weekly opening hours and `Contains`, with timezone and DST tests. *Go: `time`, value types, methods.*
-- [ ] **1.3** `NewBooking`: all booking rules. *Go: `errors.Is`, wrapping with `%w`.*
+- [x] **1.3** `NewBooking`: all booking rules. *Go: `errors.Is`, wrapping with `%w`.*
 - [ ] **1.4** `NewMember`, Actor (member, front desk with locations, admin) and cancel rule, `Cancel`. *Go: pointer vs value receivers, small enums with `iota`.*
 - [ ] **1.5** `BookingStore` interface and `BookingService` with injected clock. *Go: implicit interfaces, `context.Context`.*
 - [ ] **1.6** In-memory store plus a concurrent booking test. *Go: goroutines, `sync.Mutex`, `sync.WaitGroup`, `-race`.*
@@ -146,7 +146,7 @@ Agent's calls, open to rejection:
 | README rule | Enforced by |
 |---|---|
 | No overlapping bookings; only one simultaneous winner | Exclusion constraint in each tenant schema on `(space_id, tstzrange(starts_at, ends_at))` where not cancelled; Postgres error `23P01` maps to `ErrSlotTaken` |
-| End after start, within opening hours, capacity, max length | Domain constructor `cowbook.NewBooking` |
+| End after start, within opening hours, capacity, max length | Domain constructor `cowbook.NewBooking`, which also refuses unavailable spaces and starts in the past (Agent's call, open to rejection) |
 | Only the booker or staff can cancel | Domain rule, checked in the service: the booker, an admin, or front desk assigned to that location |
 | Cancelling frees the slot immediately | `cancelled_at` set in one transaction; the constraint ignores cancelled rows; history is kept |
 | No operator sees another's data | A schema per tenant, plus a per-tenant DB role that has no access to other schemas; other tenants' resources return 404 |
@@ -181,10 +181,9 @@ Agent's calls, open to rejection at each step.
 - `Member` and `Staff`: **separate tables**, so support can be granted access to staff accounts and denied member data. Email is unique per tenant. `Staff` has a role (admin or front desk); a `staff_locations` table holds front desk assignments.
 - `SupportUser`, `AuditEntry`: platform level, no tenant.
 
-Type conventions, still to be applied to `Booking` and `Member` in `cowbook/types.go`:
+Type conventions, still to be applied to `Member` in `cowbook/types.go`:
 
 - IDs are `int64`, matching Postgres `bigint` and sqlc.
-- Booking `deletedAt` becomes `cancelledAt`.
 - Fields stay unexported and are set through validating constructors.
 
 ### Database roles
