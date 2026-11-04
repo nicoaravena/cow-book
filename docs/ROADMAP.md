@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally.
 
-**Next up:** step 1.2.
+**Next up:** step 1.3.
 
 ## How to work
 
@@ -31,7 +31,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 ### M1: Domain rules, no database
 
 - [x] **1.1** `NewSpace` and validation. *Go: exported vs unexported, constructors, sentinel errors, table-driven tests.*
-- [ ] **1.2** Weekly opening hours and `Contains`, with timezone and DST tests. *Go: `time`, value types, methods.*
+- [x] **1.2** Weekly opening hours and `Contains`, with timezone and DST tests. *Go: `time`, value types, methods.*
 - [ ] **1.3** `NewBooking`: all booking rules. *Go: `errors.Is`, wrapping with `%w`.*
 - [ ] **1.4** `NewMember`, Actor (member, front desk with locations, admin) and cancel rule, `Cancel`. *Go: pointer vs value receivers, small enums with `iota`.*
 - [ ] **1.5** `BookingStore` interface and `BookingService` with injected clock. *Go: implicit interfaces, `context.Context`.*
@@ -233,3 +233,4 @@ Already added: `staticcheck`, as a `go tool` entry.
 - **Limited support view:** with no member or booking totals, support can't tell how busy an operator is, and the platform can't estimate cost per operator from this view. That part of the README stays open.
 - **Public registration:** anyone can create a member account on an operator's page, with no email check. The per-IP limit slows abuse but doesn't verify identity.
 - **Per-tenant roles arrive in M5:** schemas and `WithTenant` exist from M2, so nothing needs reshaping, but the second lock and the isolation proof come later. M3 and M4 run only locally.
+- **Opening hours on a clock change:** `WeeklyHours.Contains` checks only the two ends of a booking. If the clock goes back during a booking and a window opens or closes inside the repeated hour, the booking can pass while briefly outside the window. Example: New York, 1 Nov 2026, window 00:00-01:30, booking 01:00 EDT to 01:20 EST. A test pins this behavior. The fix is a loop over `Time.ZoneBounds`, not worth the code for one hour a year.

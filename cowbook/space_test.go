@@ -15,6 +15,24 @@ func validSpaceParams() SpaceParams {
 		Kind:             KindMeetingRoom,
 		Capacity:         8,
 		MaxBookingLength: 4 * time.Hour,
+		Hours:            mustHours(OpeningWindow{time.Monday, at(9, 0), at(17, 0)}),
+	}
+}
+
+func TestNewSpaceKeepsHours(t *testing.T) {
+	s, err := NewSpace(validSpaceParams(), time.Now())
+	if err != nil {
+		t.Fatalf("NewSpace() error = %v, want nil", err)
+	}
+
+	// Monday 2 November, inside the window, and Tuesday 3 November, outside it.
+	monday := time.Date(2026, time.November, 2, 10, 0, 0, 0, time.UTC)
+	if !s.hours.Contains(monday, monday.Add(time.Hour), time.UTC) {
+		t.Error("hours do not contain Monday 10:00 to 11:00")
+	}
+	tuesday := monday.AddDate(0, 0, 1)
+	if s.hours.Contains(tuesday, tuesday.Add(time.Hour), time.UTC) {
+		t.Error("hours contain Tuesday 10:00 to 11:00")
 	}
 }
 
@@ -98,6 +116,8 @@ func TestNewSpaceValidation(t *testing.T) {
 		{"zero length", func(p *SpaceParams) { p.MaxBookingLength = 0 }, ErrInvalidMaxBookingLength},
 		{"negative length", func(p *SpaceParams) { p.MaxBookingLength = -time.Hour }, ErrInvalidMaxBookingLength},
 		{"over a day", func(p *SpaceParams) { p.MaxBookingLength = 24*time.Hour + time.Nanosecond }, ErrInvalidMaxBookingLength},
+
+		{"no opening hours", func(p *SpaceParams) { p.Hours = WeeklyHours{} }, ErrNoOpeningHours},
 	}
 
 	for _, tt := range tests {

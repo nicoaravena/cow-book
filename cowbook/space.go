@@ -17,6 +17,7 @@ var (
 	ErrInvalidSpaceKind        = errors.New("space kind is not recognized")
 	ErrInvalidCapacity         = errors.New("space capacity must be at least 1")
 	ErrInvalidMaxBookingLength = errors.New("max booking length must be more than 0 and at most 24 hours")
+	ErrNoOpeningHours          = errors.New("space needs opening hours")
 )
 
 // SpaceKind says what type of space is being rented out.
@@ -45,6 +46,7 @@ type Space struct {
 	kind             SpaceKind
 	capacity         int
 	maxBookingLength time.Duration
+	hours            WeeklyHours
 	available        bool
 	createdAt        time.Time
 	updatedAt        time.Time
@@ -57,6 +59,7 @@ type SpaceParams struct {
 	Kind             SpaceKind
 	Capacity         int
 	MaxBookingLength time.Duration
+	Hours            WeeklyHours
 }
 
 // NewSpace validates p and returns an available Space. The ID stays 0
@@ -75,6 +78,8 @@ func NewSpace(p SpaceParams, now time.Time) (Space, error) {
 		return Space{}, ErrInvalidCapacity
 	case p.MaxBookingLength <= 0 || p.MaxBookingLength > maxBookingLengthLimit:
 		return Space{}, ErrInvalidMaxBookingLength
+	case p.Hours.closedAllWeek():
+		return Space{}, ErrNoOpeningHours
 	}
 
 	return Space{
@@ -83,6 +88,7 @@ func NewSpace(p SpaceParams, now time.Time) (Space, error) {
 		kind:             p.Kind,
 		capacity:         p.Capacity,
 		maxBookingLength: p.MaxBookingLength,
+		hours:            p.Hours,
 		available:        true,
 		createdAt:        now,
 		updatedAt:        now,
