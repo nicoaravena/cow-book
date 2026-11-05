@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally.
 
-**Next up:** step 1.4.
+**Next up:** step 1.5.
 
 ## How to work
 
@@ -20,8 +20,6 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - From M3: exercise the running server with `curl`, with commands given in each step.
 - At the end: the 7.7 run-through in a browser, and a checklist mapping each README rule to the test that proves it.
 
-`make lint` is expected to fail on unused `Member` fields until step 1.4 is done.
-
 ## Steps
 
 ### M0: Foundation
@@ -33,7 +31,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [x] **1.1** `NewSpace` and validation. *Go: exported vs unexported, constructors, sentinel errors, table-driven tests.*
 - [x] **1.2** Weekly opening hours and `Contains`, with timezone and DST tests. *Go: `time`, value types, methods.*
 - [x] **1.3** `NewBooking`: all booking rules. *Go: `errors.Is`, wrapping with `%w`.*
-- [ ] **1.4** `NewMember`, Actor (member, front desk with locations, admin) and cancel rule, `Cancel`. *Go: pointer vs value receivers, small enums with `iota`.*
+- [x] **1.4** `NewMember`, Actor (member, front desk with locations, admin) and cancel rule, `Cancel`. *Go: pointer vs value receivers, small enums with `iota`.*
 - [ ] **1.5** `BookingStore` interface and `BookingService` with injected clock. *Go: implicit interfaces, `context.Context`.*
 - [ ] **1.6** In-memory store plus a concurrent booking test. *Go: goroutines, `sync.Mutex`, `sync.WaitGroup`, `-race`.*
 
@@ -122,6 +120,7 @@ Decided by the user:
 - **Member accounts:** members self-register on their operator's page. Locked-out members get a new password from staff.
 - **Staff roles:** two operator roles, admin and front desk. Admins manage staff accounts and cover the whole operator. Front desk staff are limited to their assigned locations.
 - **Support view:** the operator list shows staff counts, plan and status only. No member or booking totals, so the database guarantee stays absolute.
+- **Member deletion:** members are soft-deleted. The record stays, so bookings and history still point at a real member.
 
 Proposed by Agent and accepted in conversation:
 
@@ -140,6 +139,8 @@ Agent's calls, open to rejection:
 - **Suspension:** a suspended operator's routes all return 403, for members and staff. Data is kept and support can reactivate.
 - **Plans:** three fixed plans in code, each with a request rate and a maximum number of spaces.
 - **Availability:** booked intervals and opening hours, to the minute. No fixed slot grid.
+- **`Cancel` takes the `Space`:** a `Booking` holds only `spaceID`, so the location has to come from somewhere. Passing the `Space` matches `NewBooking` and lets a mismatched space be refused, where a wrong location ID would silently authorize against the wrong location. Cost: 2.6 has to load the space to cancel.
+- **Ended bookings can't be cancelled:** not a README rule. Cancelling last Tuesday's booking would rewrite who used the room. A booking in progress can still be cancelled, which frees the rest of the slot.
 
 ## How each README rule is enforced
 
@@ -147,7 +148,7 @@ Agent's calls, open to rejection:
 |---|---|
 | No overlapping bookings; only one simultaneous winner | Exclusion constraint in each tenant schema on `(space_id, tstzrange(starts_at, ends_at))` where not cancelled; Postgres error `23P01` maps to `ErrSlotTaken` |
 | End after start, within opening hours, capacity, max length | Domain constructor `cowbook.NewBooking`, which also refuses unavailable spaces and starts in the past (Agent's call, open to rejection) |
-| Only the booker or staff can cancel | Domain rule, checked in the service: the booker, an admin, or front desk assigned to that location |
+| Only the booker or staff can cancel | Domain rule in `Booking.Cancel`, which the service calls: the booker, an admin, or front desk assigned to that location |
 | Cancelling frees the slot immediately | `cancelled_at` set in one transaction; the constraint ignores cancelled rows; history is kept |
 | No operator sees another's data | A schema per tenant, plus a per-tenant DB role that has no access to other schemas; other tenants' resources return 404 |
 | Support can manage accounts, not member data or bookings | Separate DB role granted only the `staff` table in each tenant schema, so the database refuses even if the code is wrong |
@@ -178,10 +179,10 @@ Agent's calls, open to rejection at each step.
 - `Location`: name, IANA timezone. Added for chains with many locations.
 - `Space`: location, name, kind, capacity, max booking length, weekly opening hours, available flag.
 - `Booking`: space, member, attendees (new, needed for the capacity rule), start, end, `cancelledAt`. A booking must fit inside one opening window, so it cannot cross midnight.
-- `Member` and `Staff`: **separate tables**, so support can be granted access to staff accounts and denied member data. Email is unique per tenant. `Staff` has a role (admin or front desk); a `staff_locations` table holds front desk assignments.
+- `Member` and `Staff`: **separate tables**, so support can be granted access to staff accounts and denied member data. Email is unique per tenant. Members are soft-deleted with `deletedAt`. `Staff` has a role (admin or front desk); a `staff_locations` table holds front desk assignments.
 - `SupportUser`, `AuditEntry`: platform level, no tenant.
 
-Type conventions, still to be applied to `Member` in `cowbook/types.go`:
+Type conventions:
 
 - IDs are `int64`, matching Postgres `bigint` and sqlc.
 - Fields stay unexported and are set through validating constructors.
@@ -233,3 +234,9 @@ Already added: `staticcheck`, as a `go tool` entry.
 - **Public registration:** anyone can create a member account on an operator's page, with no email check. The per-IP limit slows abuse but doesn't verify identity.
 - **Per-tenant roles arrive in M5:** schemas and `WithTenant` exist from M2, so nothing needs reshaping, but the second lock and the isolation proof come later. M3 and M4 run only locally.
 - **Opening hours on a clock change:** `WeeklyHours.Contains` checks only the two ends of a booking. If the clock goes back during a booking and a window opens or closes inside the repeated hour, the booking can pass while briefly outside the window. Example: New York, 1 Nov 2026, window 00:00-01:30, booking 01:00 EDT to 01:20 EST. A test pins this behavior. The fix is a loop over `Time.ZoneBounds`, not worth the code for one hour a year.
+- **Member soft delete, still open:** `Member.Delete` only records the deletion.
+  - Who may delete: no actor check yet. Member management arrives in 3.7 and role checks in 4.6.
+  - Booking as a deleted member: `NewBooking` takes only a `MemberID`, so it can't see the member. The check belongs in the service (1.5 or later), and login must refuse deleted members (4.2).
+  - Future bookings of a deleted member: they stay active and hold their slots. Whether deleting should cancel them is a question for 3.7.
+  - Email reuse: the unique email index in 2.2 must decide whether a deleted member's email can register again. A partial index (`WHERE deleted_at IS NULL`) allows it.
+  - Personal data: soft delete keeps the name and email. Erasing them on request is not covered.

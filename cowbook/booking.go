@@ -80,3 +80,31 @@ func NewBooking(space Space, loc *time.Location, p BookingParams, now time.Time)
 		updatedAt: now,
 	}, nil
 }
+
+// Errors returned by Cancel. Callers compare them with errors.Is.
+var (
+	ErrCancelNotAllowed = errors.New("only the booker or the operator's staff can cancel this booking")
+	ErrAlreadyCancelled = errors.New("booking is already cancelled")
+	ErrBookingEnded     = errors.New("booking has already ended")
+)
+
+// Cancel marks the booking as cancelled, which frees its slot. space must be
+// the booking's own space: its location decides what front desk staff may do,
+// and any other space is refused. Permission comes first, so someone not
+// allowed learns nothing about the booking. An ended booking stays as it is,
+// to keep the history true. It has a pointer receiver because it changes the
+// booking. On error the booking is unchanged.
+func (b *Booking) Cancel(actor Actor, space Space, now time.Time) error {
+	switch {
+	case space.ID != b.spaceID || !actor.canCancel(*b, space.locationID):
+		return ErrCancelNotAllowed
+	case !b.cancelledAt.IsZero():
+		return ErrAlreadyCancelled
+	case !now.Before(b.end):
+		return ErrBookingEnded
+	}
+
+	b.cancelledAt = now
+	b.updatedAt = now
+	return nil
+}

@@ -297,3 +297,125 @@ func TestNewBookingLengthAcrossDST(t *testing.T) {
 		})
 	}
 }
+
+// cancellableBooking returns a valid booking on storedSpace, on Monday 9
+// November from 10:00 to 11:00 UTC, as it looks after being stored.
+func cancellableBooking(t *testing.T) Booking {
+	t.Helper()
+	b, err := NewBooking(storedSpace(t), time.UTC, validBookingParams(), bookingNow)
+	if err != nil {
+		t.Fatalf("NewBooking() error = %v, want nil", err)
+	}
+	b.ID = 11
+	return b
+}
+
+func TestCancelSetsFields(t *testing.T) {
+	b := cancellableBooking(t)
+	later := bookingNow.Add(time.Hour)
+
+	if err := b.Cancel(MemberActor(3), storedSpace(t), later); err != nil {
+		t.Fatalf("Cancel() error = %v, want nil", err)
+	}
+
+	if !b.cancelledAt.Equal(later) {
+		t.Errorf("cancelledAt = %v, want %v", b.cancelledAt, later)
+	}
+	if !b.updatedAt.Equal(later) {
+		t.Errorf("updatedAt = %v, want %v", b.updatedAt, later)
+	}
+	if !b.createdAt.Equal(bookingNow) {
+		t.Errorf("createdAt = %v, want it unchanged at %v", b.createdAt, bookingNow)
+	}
+}
+
+func TestCancelTiming(t *testing.T) {
+	end := validBookingParams().End
+
+	tests := []struct {
+		name    string
+		now     time.Time
+		wantErr error
+	}{
+		{"before it starts", bookingNow, nil},
+		{"while in progress", end.Add(-time.Minute), nil},
+		{"a nanosecond before the end", end.Add(-time.Nanosecond), nil},
+		{"exactly at the end", end, ErrBookingEnded},
+		{"after the end", end.Add(time.Hour), ErrBookingEnded},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := cancellableBooking(t)
+
+			err := b.Cancel(MemberActor(3), storedSpace(t), tt.now)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("Cancel() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestCancelTwice(t *testing.T) {
+	b := cancellableBooking(t)
+	if err := b.Cancel(MemberActor(3), storedSpace(t), bookingNow); err != nil {
+		t.Fatalf("first Cancel() error = %v, want nil", err)
+	}
+
+	err := b.Cancel(AdminActor(1), storedSpace(t), bookingNow.Add(time.Minute))
+	if !errors.Is(err, ErrAlreadyCancelled) {
+		t.Errorf("second Cancel() error = %v, want %v", err, ErrAlreadyCancelled)
+	}
+}
+
+// Already cancelled comes before ended, so a booking cancelled in time keeps
+// saying so after its end has passed.
+func TestCancelTwiceAfterTheEnd(t *testing.T) {
+	b := cancellableBooking(t)
+	if err := b.Cancel(MemberActor(3), storedSpace(t), bookingNow); err != nil {
+		t.Fatalf("first Cancel() error = %v, want nil", err)
+	}
+
+	err := b.Cancel(MemberActor(3), storedSpace(t), validBookingParams().End.Add(time.Hour))
+	if !errors.Is(err, ErrAlreadyCancelled) {
+		t.Errorf("second Cancel() error = %v, want %v", err, ErrAlreadyCancelled)
+	}
+}
+
+func TestCancelRefusalLeavesBookingUnchanged(t *testing.T) {
+	end := validBookingParams().End
+
+	otherSpace := storedSpace(t)
+	otherSpace.ID = 8
+
+	cancelled := cancellableBooking(t)
+	if err := cancelled.Cancel(MemberActor(3), storedSpace(t), bookingNow); err != nil {
+		t.Fatalf("Cancel() error = %v, want nil", err)
+	}
+
+	tests := []struct {
+		name    string
+		booking Booking
+		actor   Actor
+		space   Space
+		now     time.Time
+	}{
+		{"not allowed", cancellableBooking(t), MemberActor(4), storedSpace(t), bookingNow},
+		{"wrong space", cancellableBooking(t), MemberActor(3), otherSpace, bookingNow},
+		{"already cancelled", cancelled, MemberActor(3), storedSpace(t), bookingNow.Add(time.Minute)},
+		{"ended", cancellableBooking(t), MemberActor(3), storedSpace(t), end},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := tt.booking
+
+			if err := b.Cancel(tt.actor, tt.space, tt.now); err == nil {
+				t.Fatal("Cancel() error = nil, want a refusal")
+			}
+			if b != tt.booking {
+				t.Errorf("booking = %+v, want it unchanged: %+v", b, tt.booking)
+			}
+		})
+	}
+}
