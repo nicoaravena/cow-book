@@ -38,7 +38,7 @@ func validBookingParams() BookingParams {
 func TestNewBookingSetsFields(t *testing.T) {
 	p := validBookingParams()
 
-	b, err := NewBooking(storedSpace(t), time.UTC, p, bookingNow)
+	b, err := NewBooking(MemberActor(3), storedSpace(t), time.UTC, p, bookingNow)
 	if err != nil {
 		t.Fatalf("NewBooking() error = %v, want nil", err)
 	}
@@ -70,8 +70,13 @@ func TestNewBookingSetsFields(t *testing.T) {
 	if !b.cancelledAt.IsZero() {
 		t.Errorf("cancelledAt = %v, want zero on a new booking", b.cancelledAt)
 	}
+	if !b.approvedAt.IsZero() {
+		t.Errorf("approvedAt = %v, want zero on a new booking", b.approvedAt)
+	}
 }
 
+// The validation tables book as an admin, who may book for any member ID, so
+// the permission rule doesn't hide the rule each case breaks.
 func TestNewBookingValidation(t *testing.T) {
 	// times sets the period on Monday 9 November.
 	times := func(p *BookingParams, startHour, startMinute, endHour, endMinute int) {
@@ -132,7 +137,7 @@ func TestNewBookingValidation(t *testing.T) {
 			p := validBookingParams()
 			tt.change(&p, &s)
 
-			_, err := NewBooking(s, time.UTC, p, bookingNow)
+			_, err := NewBooking(AdminActor(1), s, time.UTC, p, bookingNow)
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("NewBooking() error = %v, want %v", err, tt.wantErr)
 			}
@@ -187,7 +192,7 @@ func TestNewBookingRuleOrder(t *testing.T) {
 			p := validBookingParams()
 			tt.change(&p, &s)
 
-			_, err := NewBooking(s, time.UTC, p, bookingNow)
+			_, err := NewBooking(AdminActor(1), s, time.UTC, p, bookingNow)
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("NewBooking() error = %v, want %v", err, tt.wantErr)
 			}
@@ -223,7 +228,7 @@ func TestNewBookingWrappedErrors(t *testing.T) {
 			p := validBookingParams()
 			tt.change(&p)
 
-			_, err := NewBooking(storedSpace(t), time.UTC, p, bookingNow)
+			_, err := NewBooking(MemberActor(3), storedSpace(t), time.UTC, p, bookingNow)
 
 			if !errors.Is(err, tt.sentinel) {
 				t.Errorf("errors.Is(%v, %v) = false, want true", err, tt.sentinel)
@@ -247,10 +252,10 @@ func TestNewBookingTimezone(t *testing.T) {
 	p.Start = utc(time.November, 9, 15, 0)
 	p.End = utc(time.November, 9, 16, 0)
 
-	if _, err := NewBooking(storedSpace(t), newYork, p, bookingNow); err != nil {
+	if _, err := NewBooking(MemberActor(3), storedSpace(t), newYork, p, bookingNow); err != nil {
 		t.Errorf("NewBooking() in New York error = %v, want nil", err)
 	}
-	if _, err := NewBooking(storedSpace(t), tokyo, p, bookingNow); !errors.Is(err, ErrOutsideOpeningHours) {
+	if _, err := NewBooking(MemberActor(3), storedSpace(t), tokyo, p, bookingNow); !errors.Is(err, ErrOutsideOpeningHours) {
 		t.Errorf("NewBooking() in Tokyo error = %v, want %v", err, ErrOutsideOpeningHours)
 	}
 }
@@ -290,7 +295,7 @@ func TestNewBookingLengthAcrossDST(t *testing.T) {
 			p.Start = tt.start
 			p.End = tt.end
 
-			_, err := NewBooking(s, newYork, p, beforeBoth)
+			_, err := NewBooking(MemberActor(3), s, newYork, p, beforeBoth)
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("NewBooking() error = %v, want %v", err, tt.wantErr)
 			}
@@ -298,11 +303,50 @@ func TestNewBookingLengthAcrossDST(t *testing.T) {
 	}
 }
 
+// A booking staff make for a member waits for the member's approval until 24
+// hours after it was made, or until it starts if that comes first.
+func TestNewBookingApprovalDeadline(t *testing.T) {
+	// soon starts two hours after bookingNow, the same Monday.
+	soon := validBookingParams()
+	soon.Start = utc(time.November, 2, 11, 0)
+	soon.End = utc(time.November, 2, 12, 0)
+
+	tests := []struct {
+		name         string
+		actor        Actor
+		p            BookingParams
+		wantBookedBy int64
+		wantDeadline time.Time // zero: no approval needed
+	}{
+		{"member for themselves", MemberActor(3), validBookingParams(), 0, time.Time{}},
+		{"front desk, a week ahead", FrontDeskActor(2, []int64{1}), validBookingParams(), 2, bookingNow.Add(24 * time.Hour)},
+		{"admin, a week ahead", AdminActor(1), validBookingParams(), 1, bookingNow.Add(24 * time.Hour)},
+		{"staff, starting in 2 hours", AdminActor(1), soon, 1, soon.Start},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, err := NewBooking(tt.actor, storedSpace(t), time.UTC, tt.p, bookingNow)
+			if err != nil {
+				t.Fatalf("NewBooking() error = %v, want nil", err)
+			}
+
+			if b.bookedBy != tt.wantBookedBy {
+				t.Errorf("bookedBy = %d, want %d", b.bookedBy, tt.wantBookedBy)
+			}
+			if !b.approvalDeadline.Equal(tt.wantDeadline) {
+				t.Errorf("approvalDeadline = %v, want %v", b.approvalDeadline, tt.wantDeadline)
+			}
+		})
+	}
+}
+
 // cancellableBooking returns a valid booking on storedSpace, on Monday 9
-// November from 10:00 to 11:00 UTC, as it looks after being stored.
+// November from 10:00 to 11:00 UTC, as it looks after being stored. Member 3
+// made it, so it needs no approval.
 func cancellableBooking(t *testing.T) Booking {
 	t.Helper()
-	b, err := NewBooking(storedSpace(t), time.UTC, validBookingParams(), bookingNow)
+	b, err := NewBooking(MemberActor(3), storedSpace(t), time.UTC, validBookingParams(), bookingNow)
 	if err != nil {
 		t.Fatalf("NewBooking() error = %v, want nil", err)
 	}
@@ -412,6 +456,138 @@ func TestCancelRefusalLeavesBookingUnchanged(t *testing.T) {
 
 			if err := b.Cancel(tt.actor, tt.space, tt.now); err == nil {
 				t.Fatal("Cancel() error = nil, want a refusal")
+			}
+			if b != tt.booking {
+				t.Errorf("booking = %+v, want it unchanged: %+v", b, tt.booking)
+			}
+		})
+	}
+}
+
+// pendingBooking returns cancellableBooking's booking, but made by front desk
+// staff 2 for member 3, so it waits for member 3's approval until Tuesday 3
+// November 09:00 UTC, 24 hours after bookingNow.
+func pendingBooking(t *testing.T) Booking {
+	t.Helper()
+	b, err := NewBooking(FrontDeskActor(2, []int64{1}), storedSpace(t), time.UTC, validBookingParams(), bookingNow)
+	if err != nil {
+		t.Fatalf("NewBooking() error = %v, want nil", err)
+	}
+	b.ID = 11
+	return b
+}
+
+func TestApproveSetsFields(t *testing.T) {
+	b := pendingBooking(t)
+	later := bookingNow.Add(time.Hour)
+
+	if err := b.Approve(MemberActor(3), later); err != nil {
+		t.Fatalf("Approve() error = %v, want nil", err)
+	}
+
+	if !b.approvedAt.Equal(later) {
+		t.Errorf("approvedAt = %v, want %v", b.approvedAt, later)
+	}
+	if !b.updatedAt.Equal(later) {
+		t.Errorf("updatedAt = %v, want %v", b.updatedAt, later)
+	}
+	if !b.createdAt.Equal(bookingNow) {
+		t.Errorf("createdAt = %v, want it unchanged at %v", b.createdAt, bookingNow)
+	}
+}
+
+func TestApproveTiming(t *testing.T) {
+	deadline := bookingNow.Add(24 * time.Hour)
+
+	tests := []struct {
+		name    string
+		now     time.Time
+		wantErr error
+	}{
+		{"right after it was made", bookingNow, nil},
+		{"a nanosecond before the deadline", deadline.Add(-time.Nanosecond), nil},
+		{"exactly at the deadline", deadline, ErrApprovalExpired},
+		{"after the deadline", deadline.Add(time.Hour), ErrApprovalExpired},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := pendingBooking(t)
+
+			err := b.Approve(MemberActor(3), tt.now)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("Approve() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestApproveTwice(t *testing.T) {
+	b := pendingBooking(t)
+	if err := b.Approve(MemberActor(3), bookingNow); err != nil {
+		t.Fatalf("first Approve() error = %v, want nil", err)
+	}
+
+	err := b.Approve(MemberActor(3), bookingNow.Add(time.Minute))
+	if !errors.Is(err, ErrNotPending) {
+		t.Errorf("second Approve() error = %v, want %v", err, ErrNotPending)
+	}
+}
+
+// A member's own booking never waits for approval.
+func TestApproveMemberMadeBooking(t *testing.T) {
+	b := cancellableBooking(t)
+
+	err := b.Approve(MemberActor(3), bookingNow)
+	if !errors.Is(err, ErrNotPending) {
+		t.Errorf("Approve() error = %v, want %v", err, ErrNotPending)
+	}
+}
+
+// Declining is cancelling: the member uses Cancel, after which the booking can
+// no longer be approved.
+func TestDeclineThenApprove(t *testing.T) {
+	b := pendingBooking(t)
+	if err := b.Cancel(MemberActor(3), storedSpace(t), bookingNow); err != nil {
+		t.Fatalf("Cancel() error = %v, want nil", err)
+	}
+
+	err := b.Approve(MemberActor(3), bookingNow.Add(time.Minute))
+	if !errors.Is(err, ErrAlreadyCancelled) {
+		t.Errorf("Approve() error = %v, want %v", err, ErrAlreadyCancelled)
+	}
+}
+
+func TestApproveRefusalLeavesBookingUnchanged(t *testing.T) {
+	deadline := bookingNow.Add(24 * time.Hour)
+
+	approved := pendingBooking(t)
+	if err := approved.Approve(MemberActor(3), bookingNow); err != nil {
+		t.Fatalf("Approve() error = %v, want nil", err)
+	}
+	cancelled := pendingBooking(t)
+	if err := cancelled.Cancel(MemberActor(3), storedSpace(t), bookingNow); err != nil {
+		t.Fatalf("Cancel() error = %v, want nil", err)
+	}
+
+	tests := []struct {
+		name    string
+		booking Booking
+		actor   Actor
+		now     time.Time
+	}{
+		{"not allowed", pendingBooking(t), MemberActor(4), bookingNow},
+		{"already cancelled", cancelled, MemberActor(3), bookingNow.Add(time.Minute)},
+		{"already approved", approved, MemberActor(3), bookingNow.Add(time.Minute)},
+		{"deadline passed", pendingBooking(t), MemberActor(3), deadline},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := tt.booking
+
+			if err := b.Approve(tt.actor, tt.now); err == nil {
+				t.Fatal("Approve() error = nil, want a refusal")
 			}
 			if b != tt.booking {
 				t.Errorf("booking = %+v, want it unchanged: %+v", b, tt.booking)

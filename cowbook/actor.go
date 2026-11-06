@@ -37,13 +37,13 @@ func FrontDeskActor(id int64, locations []int64) Actor {
 	return Actor{id: id, role: roleFrontDesk, locations: slices.Clone(locations)}
 }
 
-// canCancel reports whether a may cancel b, which is at locationID. The ID is
-// compared only for members: members and staff are separate tables, so staff 3
-// is not member 3.
-func (a Actor) canCancel(b Booking, locationID int64) bool {
+// actsFor reports whether a may book or cancel for the member with memberID at
+// locationID. The ID is compared only for members: members and staff are
+// separate tables, so staff 3 is not member 3.
+func (a Actor) actsFor(memberID, locationID int64) bool {
 	switch a.role {
 	case roleMember:
-		return a.id == b.memberID
+		return a.id == memberID
 	case roleFrontDesk:
 		return slices.Contains(a.locations, locationID)
 	case roleAdmin:

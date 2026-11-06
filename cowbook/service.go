@@ -28,6 +28,11 @@ type BookingStore interface {
 	// ErrAlreadyCancelled. It returns ErrBookingNotFound if there is no such
 	// booking.
 	SaveCancellation(ctx context.Context, b Booking) error
+	// SaveApproval stores a booking that Approve has changed. An approve can
+	// race a cancel or another approve, so the store decides the winner: the
+	// loser gets ErrAlreadyCancelled or ErrNotPending. It returns
+	// ErrBookingNotFound if there is no such booking.
+	SaveApproval(ctx context.Context, b Booking) error
 }
 
 // SpaceStore keeps spaces.
@@ -59,12 +64,18 @@ func NewBookingService(bookings BookingStore, spaces SpaceStore, members MemberS
 	return &BookingService{bookings: bookings, spaces: spaces, members: members, now: now}
 }
 
-// Book creates a booking of the space for p.MemberID. A deleted member can't
-// book. It does not check who is asking: the caller must have settled that
-// p.MemberID is allowed. Errors from the stores and NewBooking come back as they
-// are, including ErrSlotTaken when another booking won the slot.
-func (s *BookingService) Book(ctx context.Context, spaceID int64, p BookingParams) (Booking, error) {
+// Book creates a booking of the space for p.MemberID on behalf of actor. The
+// rules, including who may book for whom, are in NewBooking, which runs before
+// the member is loaded so a refused actor learns nothing about the member. A
+// deleted member can't be booked for. Errors from the stores and NewBooking come
+// back as they are, including ErrSlotTaken when another booking won the slot.
+func (s *BookingService) Book(ctx context.Context, actor Actor, spaceID int64, p BookingParams) (Booking, error) {
 	space, loc, err := s.spaces.GetSpace(ctx, spaceID)
+	if err != nil {
+		return Booking{}, err
+	}
+
+	b, err := NewBooking(actor, space, loc, p, s.now())
 	if err != nil {
 		return Booking{}, err
 	}
@@ -77,10 +88,6 @@ func (s *BookingService) Book(ctx context.Context, spaceID int64, p BookingParam
 		return Booking{}, ErrMemberDeleted
 	}
 
-	b, err := NewBooking(space, loc, p, s.now())
-	if err != nil {
-		return Booking{}, err
-	}
 	return s.bookings.CreateBooking(ctx, b)
 }
 
@@ -101,6 +108,24 @@ func (s *BookingService) Cancel(ctx context.Context, actor Actor, bookingID int6
 		return Booking{}, err
 	}
 	if err := s.bookings.SaveCancellation(ctx, b); err != nil {
+		return Booking{}, err
+	}
+	return b, nil
+}
+
+// Approve records actor's approval of a pending booking and returns it as
+// stored. The rules are in Booking.Approve. Errors from the stores come back as
+// they are.
+func (s *BookingService) Approve(ctx context.Context, actor Actor, bookingID int64) (Booking, error) {
+	b, err := s.bookings.GetBooking(ctx, bookingID)
+	if err != nil {
+		return Booking{}, err
+	}
+
+	if err := b.Approve(actor, s.now()); err != nil {
+		return Booking{}, err
+	}
+	if err := s.bookings.SaveApproval(ctx, b); err != nil {
 		return Booking{}, err
 	}
 	return b, nil

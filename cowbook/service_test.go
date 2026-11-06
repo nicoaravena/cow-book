@@ -8,18 +8,20 @@ import (
 )
 
 // fakeStore stands in for all three stores. It keeps what it is given in maps
-// and records every call's context. Set createErr or saveErr to make that call
-// fail, the way a real store would on a lost race.
+// and records every call's context. Set createErr, saveErr or approveErr to
+// make that call fail, the way a real store would on a lost race.
 type fakeStore struct {
-	spaces    map[int64]Space
-	loc       *time.Location
-	members   map[int64]Member
-	bookings  map[int64]Booking
-	createErr error
-	saveErr   error
-	created   []Booking
-	saved     []Booking
-	contexts  []context.Context
+	spaces     map[int64]Space
+	loc        *time.Location
+	members    map[int64]Member
+	bookings   map[int64]Booking
+	createErr  error
+	saveErr    error
+	approveErr error
+	created    []Booking
+	saved      []Booking
+	approved   []Booking
+	contexts   []context.Context
 }
 
 func (f *fakeStore) CreateBooking(ctx context.Context, b Booking) (Booking, error) {
@@ -49,6 +51,16 @@ func (f *fakeStore) SaveCancellation(ctx context.Context, b Booking) error {
 	}
 	f.bookings[b.ID] = b
 	f.saved = append(f.saved, b)
+	return nil
+}
+
+func (f *fakeStore) SaveApproval(ctx context.Context, b Booking) error {
+	f.contexts = append(f.contexts, ctx)
+	if f.approveErr != nil {
+		return f.approveErr
+	}
+	f.bookings[b.ID] = b
+	f.approved = append(f.approved, b)
 	return nil
 }
 
@@ -99,7 +111,7 @@ func TestBookStoresTheBooking(t *testing.T) {
 	store := newFakeStore(t)
 	svc := newTestService(store, bookingNow)
 
-	b, err := svc.Book(context.Background(), 7, validBookingParams())
+	b, err := svc.Book(context.Background(), MemberActor(3), 7, validBookingParams())
 	if err != nil {
 		t.Fatalf("Book() error = %v, want nil", err)
 	}
@@ -134,7 +146,7 @@ func TestBookUsesTheInjectedClock(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := newTestService(newFakeStore(t), tt.now)
 
-			_, err := svc.Book(context.Background(), 7, p)
+			_, err := svc.Book(context.Background(), MemberActor(3), 7, p)
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("Book() error = %v, want %v", err, tt.wantErr)
 			}
@@ -162,7 +174,7 @@ func TestBookUsesTheLocationFromTheStore(t *testing.T) {
 			store.loc = loadLocation(t, tt.zone)
 			svc := newTestService(store, bookingNow)
 
-			_, err := svc.Book(context.Background(), 7, p)
+			_, err := svc.Book(context.Background(), MemberActor(3), 7, p)
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("Book() error = %v, want %v", err, tt.wantErr)
 			}
@@ -173,17 +185,37 @@ func TestBookUsesTheLocationFromTheStore(t *testing.T) {
 func TestBookRefusalsStoreNothing(t *testing.T) {
 	tests := []struct {
 		name    string
+		actor   Actor
 		spaceID int64
 		change  func(t *testing.T, store *fakeStore, p *BookingParams)
 		wantErr error
 	}{
 		{
 			name:    "unknown space",
+			actor:   MemberActor(3),
 			spaceID: 999,
 			wantErr: ErrSpaceNotFound,
 		},
 		{
+			name:    "not allowed",
+			actor:   MemberActor(4),
+			spaceID: 7,
+			wantErr: ErrBookNotAllowed,
+		},
+		{
+			// Permission comes before loading the member, so someone not
+			// allowed can't tell which member IDs exist.
+			name:    "not allowed, unknown member",
+			actor:   MemberActor(4),
+			spaceID: 7,
+			change: func(t *testing.T, store *fakeStore, p *BookingParams) {
+				p.MemberID = 999
+			},
+			wantErr: ErrBookNotAllowed,
+		},
+		{
 			name:    "unknown member",
+			actor:   AdminActor(1),
 			spaceID: 7,
 			change: func(t *testing.T, store *fakeStore, p *BookingParams) {
 				p.MemberID = 999
@@ -192,6 +224,7 @@ func TestBookRefusalsStoreNothing(t *testing.T) {
 		},
 		{
 			name:    "deleted member",
+			actor:   MemberActor(3),
 			spaceID: 7,
 			change: func(t *testing.T, store *fakeStore, p *BookingParams) {
 				m := store.members[3]
@@ -204,6 +237,7 @@ func TestBookRefusalsStoreNothing(t *testing.T) {
 		},
 		{
 			name:    "domain rule",
+			actor:   MemberActor(3),
 			spaceID: 7,
 			change: func(t *testing.T, store *fakeStore, p *BookingParams) {
 				p.Attendees = 99
@@ -221,7 +255,7 @@ func TestBookRefusalsStoreNothing(t *testing.T) {
 			}
 			svc := newTestService(store, bookingNow)
 
-			_, err := svc.Book(context.Background(), tt.spaceID, p)
+			_, err := svc.Book(context.Background(), tt.actor, tt.spaceID, p)
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("Book() error = %v, want %v", err, tt.wantErr)
 			}
@@ -237,9 +271,26 @@ func TestBookReturnsErrSlotTakenFromTheStore(t *testing.T) {
 	store.createErr = ErrSlotTaken
 	svc := newTestService(store, bookingNow)
 
-	_, err := svc.Book(context.Background(), 7, validBookingParams())
+	_, err := svc.Book(context.Background(), MemberActor(3), 7, validBookingParams())
 	if !errors.Is(err, ErrSlotTaken) {
 		t.Errorf("Book() error = %v, want %v", err, ErrSlotTaken)
+	}
+}
+
+func TestBookByStaffStoresPendingBooking(t *testing.T) {
+	store := newFakeStore(t)
+	svc := newTestService(store, bookingNow)
+
+	b, err := svc.Book(context.Background(), FrontDeskActor(2, []int64{1}), 7, validBookingParams())
+	if err != nil {
+		t.Fatalf("Book() error = %v, want nil", err)
+	}
+
+	if !b.awaitingApproval() {
+		t.Errorf("returned booking is not awaiting approval, want pending")
+	}
+	if len(store.created) != 1 || !store.created[0].awaitingApproval() {
+		t.Errorf("store created %+v, want one pending booking", store.created)
 	}
 }
 
@@ -338,6 +389,78 @@ func TestServiceCancelReturnsLostRaceFromTheStore(t *testing.T) {
 	}
 }
 
+// newApproveTestService returns a service whose store holds pendingBooking as
+// booking 11, with the clock at now.
+func newApproveTestService(t *testing.T, now time.Time) (*BookingService, *fakeStore) {
+	t.Helper()
+	store := newFakeStore(t)
+	store.bookings[11] = pendingBooking(t)
+	return newTestService(store, now), store
+}
+
+func TestServiceApproveSavesTheBooking(t *testing.T) {
+	later := bookingNow.Add(time.Hour)
+	svc, store := newApproveTestService(t, later)
+
+	b, err := svc.Approve(context.Background(), MemberActor(3), 11)
+	if err != nil {
+		t.Fatalf("Approve() error = %v, want nil", err)
+	}
+
+	if !b.approvedAt.Equal(later) {
+		t.Errorf("returned approvedAt = %v, want the clock's %v", b.approvedAt, later)
+	}
+	if len(store.approved) != 1 {
+		t.Fatalf("store saved %d approvals, want 1", len(store.approved))
+	}
+	if !store.approved[0].approvedAt.Equal(later) {
+		t.Errorf("saved approvedAt = %v, want the clock's %v", store.approved[0].approvedAt, later)
+	}
+}
+
+func TestServiceApproveRefusalsSaveNothing(t *testing.T) {
+	deadline := bookingNow.Add(24 * time.Hour)
+
+	tests := []struct {
+		name      string
+		actor     Actor
+		bookingID int64
+		now       time.Time
+		wantErr   error
+	}{
+		{"someone else's booking", MemberActor(4), 11, bookingNow, ErrApproveNotAllowed},
+		{"staff", AdminActor(1), 11, bookingNow, ErrApproveNotAllowed},
+		{"deadline passed", MemberActor(3), 11, deadline, ErrApprovalExpired},
+		{"unknown booking", MemberActor(3), 999, bookingNow, ErrBookingNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, store := newApproveTestService(t, tt.now)
+
+			_, err := svc.Approve(context.Background(), tt.actor, tt.bookingID)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("Approve() error = %v, want %v", err, tt.wantErr)
+			}
+			if len(store.approved) != 0 {
+				t.Errorf("store saved %d approvals, want 0", len(store.approved))
+			}
+		})
+	}
+}
+
+// An approve can race a cancel, or the store's lazy expiry. The store decides
+// the winner, and the loser must see the store's error.
+func TestServiceApproveReturnsLostRaceFromTheStore(t *testing.T) {
+	svc, store := newApproveTestService(t, bookingNow)
+	store.approveErr = ErrAlreadyCancelled
+
+	_, err := svc.Approve(context.Background(), MemberActor(3), 11)
+	if !errors.Is(err, ErrAlreadyCancelled) {
+		t.Errorf("Approve() error = %v, want %v", err, ErrAlreadyCancelled)
+	}
+}
+
 func TestServicePassesContextToEveryStoreCall(t *testing.T) {
 	type key struct{}
 	ctx := context.WithValue(context.Background(), key{}, "from the caller")
@@ -350,7 +473,7 @@ func TestServicePassesContextToEveryStoreCall(t *testing.T) {
 		{
 			name: "Book",
 			call: func(svc *BookingService) error {
-				_, err := svc.Book(ctx, 7, validBookingParams())
+				_, err := svc.Book(ctx, MemberActor(3), 7, validBookingParams())
 				return err
 			},
 			wantCalls: 3, // GetSpace, GetMember, CreateBooking
@@ -363,12 +486,19 @@ func TestServicePassesContextToEveryStoreCall(t *testing.T) {
 			},
 			wantCalls: 3, // GetBooking, GetSpace, SaveCancellation
 		},
+		{
+			name: "Approve",
+			call: func(svc *BookingService) error {
+				_, err := svc.Approve(ctx, MemberActor(3), 11)
+				return err
+			},
+			wantCalls: 2, // GetBooking, SaveApproval
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := newFakeStore(t)
-			svc := newTestService(store, bookingNow)
+			svc, store := newApproveTestService(t, bookingNow)
 
 			if err := tt.call(svc); err != nil {
 				t.Fatalf("error = %v, want nil", err)

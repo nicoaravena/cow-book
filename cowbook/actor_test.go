@@ -60,6 +60,44 @@ func TestCancelRefusesEveryoneOnWrongSpace(t *testing.T) {
 	}
 }
 
+// validBookingParams books for member 3, in space 7 at location 1.
+func TestBookPermissions(t *testing.T) {
+	tests := []struct {
+		name    string
+		actor   Actor
+		wantErr error
+	}{
+		{"the member themselves", MemberActor(3), nil},
+		{"another member", MemberActor(4), ErrBookNotAllowed},
+		{"admin", AdminActor(1), nil},
+		{"front desk at the location", FrontDeskActor(2, []int64{9, 1}), nil},
+		{"front desk at another location", FrontDeskActor(2, []int64{9}), ErrBookNotAllowed},
+		{"front desk with no locations", FrontDeskActor(2, nil), ErrBookNotAllowed},
+		{"front desk with the member's ID", FrontDeskActor(3, []int64{9}), ErrBookNotAllowed},
+		{"zero actor", Actor{}, ErrBookNotAllowed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewBooking(tt.actor, storedSpace(t), time.UTC, validBookingParams(), bookingNow)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("NewBooking() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// Someone who may not book must not learn anything about the space.
+func TestNewBookingChecksPermissionFirst(t *testing.T) {
+	s := storedSpace(t)
+	s.available = false
+
+	_, err := NewBooking(MemberActor(4), s, time.UTC, validBookingParams(), bookingNow)
+	if !errors.Is(err, ErrBookNotAllowed) {
+		t.Errorf("NewBooking() error = %v, want %v", err, ErrBookNotAllowed)
+	}
+}
+
 // Someone who may not cancel must not learn whether the booking was cancelled.
 func TestCancelChecksPermissionFirst(t *testing.T) {
 	b := cancellableBooking(t)
@@ -77,5 +115,46 @@ func TestCancelChecksPermissionFirst(t *testing.T) {
 	err = fresh.Cancel(MemberActor(4), storedSpace(t), late)
 	if !errors.Is(err, ErrCancelNotAllowed) {
 		t.Errorf("Cancel() after the end error = %v, want %v", err, ErrCancelNotAllowed)
+	}
+}
+
+// Only the member a booking is for can approve it. Staff made the booking, so
+// they can't approve it on the member's behalf.
+func TestApprovePermissions(t *testing.T) {
+	tests := []struct {
+		name    string
+		actor   Actor
+		wantErr error
+	}{
+		{"the member", MemberActor(3), nil},
+		{"another member", MemberActor(4), ErrApproveNotAllowed},
+		{"admin", AdminActor(1), ErrApproveNotAllowed},
+		{"front desk at the location", FrontDeskActor(2, []int64{1}), ErrApproveNotAllowed},
+		{"front desk with the member's ID", FrontDeskActor(3, []int64{1}), ErrApproveNotAllowed},
+		{"zero actor", Actor{}, ErrApproveNotAllowed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := pendingBooking(t)
+
+			err := b.Approve(tt.actor, bookingNow)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("Approve() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// Someone who may not approve must not learn whether the booking was cancelled.
+func TestApproveChecksPermissionFirst(t *testing.T) {
+	b := pendingBooking(t)
+	if err := b.Cancel(MemberActor(3), storedSpace(t), bookingNow); err != nil {
+		t.Fatalf("Cancel() error = %v, want nil", err)
+	}
+
+	err := b.Approve(MemberActor(4), bookingNow)
+	if !errors.Is(err, ErrApproveNotAllowed) {
+		t.Errorf("Approve() error = %v, want %v", err, ErrApproveNotAllowed)
 	}
 }

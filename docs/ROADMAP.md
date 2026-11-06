@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally.
 
-**Next up:** step 1.6.
+**Next up:** step 1.7.
 
 ## How to work
 
@@ -33,7 +33,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [x] **1.3** `NewBooking`: all booking rules. *Go: `errors.Is`, wrapping with `%w`.*
 - [x] **1.4** `NewMember`, Actor (member, front desk with locations, admin) and cancel rule, `Cancel`. *Go: pointer vs value receivers, small enums with `iota`.*
 - [x] **1.5** `BookingStore` interface and `BookingService` with injected clock. *Go: implicit interfaces, `context.Context`.* `Book` takes no `Actor` here; 1.6 adds it.
-- [ ] **1.6** Who can book, and staff bookings awaiting approval. `Book(ctx, actor, spaceID, p)`: a member books only for themselves, front desk for any member at their assigned locations, an admin for any member. A staff-made booking starts pending, with an approval deadline 24 hours after creation or at the booking's start, whichever comes first. `Booking.Approve(actor, now)` lets only that member approve, before the deadline and while not cancelled; the service gets `Approve`. Declining is the existing `Cancel`. *Go: state derived from zero-value timestamps, unexported helper methods.*
+- [x] **1.6** Who can book, and staff bookings awaiting approval. `Book(ctx, actor, spaceID, p)`: a member books only for themselves, front desk for any member at their assigned locations, an admin for any member. A staff-made booking starts pending, with an approval deadline 24 hours after creation or at the booking's start, whichever comes first. `Booking.Approve(actor, now)` lets only that member approve, before the deadline and while not cancelled; the service gets `Approve`. Declining is the existing `Cancel`. *Go: state derived from zero-value timestamps, unexported helper methods.*
 - [ ] **1.7** Deleting a member. `MemberService.Delete` marks the member deleted and cancels every booking of theirs that hasn't ended, pending ones included, through an unexported domain method that skips the actor rules (the system cancels, not a person). `Book`, `Cancel` and `Approve` refuse a deleted member acting as a member. One store method saves the deletion and the cancellations together, so Postgres can use one transaction. *Go: slices of values vs pointers, changing elements in a loop.*
 - [ ] **1.8** In-memory store plus a concurrent booking test, also covering `Approve`, member deletion and a pending booking holding its slot. *Go: goroutines, `sync.Mutex`, `sync.WaitGroup`, `-race`.*
 
@@ -255,4 +255,5 @@ Already added: `staticcheck`, as a `go tool` entry.
 - **Pending bookings can block slots:** staff can hold a slot for up to 24 hours with a booking the member never approves. Visible in the day's view; a shorter deadline or a per-staff limit would be the fix.
 - **Deleting and booking at once:** until 2.6, a booking for a member can slip in while that member is being deleted.
 - **Unexported domain fields:** `Booking`, `Space` and `Member` keep their fields unexported, so `internal/postgres` can't read them or rebuild them from a row. That needs accessors and a rebuild function by 2.4.
-- **Booking IDs can be probed:** `BookingService.Cancel` returns `ErrBookingNotFound` before it checks permission, so a member can tell which booking IDs exist within their own operator. Revisit at 3.6.
+- **Booking IDs can be probed:** `BookingService.Cancel` and `BookingService.Approve` return `ErrBookingNotFound` before they check permission, so a member can tell which booking IDs exist within their own operator. Revisit at 3.6.
+- **Staff booking that starts right away:** its approval deadline is its start, which is now, so it can never be approved. It holds the slot until lazy expiry cancels it. Refusing staff bookings that start within some minimum lead time would fix it.
