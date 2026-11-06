@@ -7,11 +7,12 @@ import (
 	"time"
 )
 
-// Errors returned by NewMember and Delete. Callers compare them with errors.Is.
+// Errors returned by NewMember, Delete and BookingService.Book. Callers compare
+// them with errors.Is.
 var (
 	ErrMemberNameRequired = errors.New("member name is required")
 	ErrInvalidMemberEmail = errors.New("member email is not valid")
-	ErrMemberDeleted      = errors.New("member is already deleted")
+	ErrMemberDeleted      = errors.New("member is deleted")
 )
 
 // Member is a person who books spaces at one operator.

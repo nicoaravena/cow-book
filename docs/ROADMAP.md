@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally.
 
-**Next up:** step 1.5.
+**Next up:** step 1.6.
 
 ## How to work
 
@@ -32,7 +32,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [x] **1.2** Weekly opening hours and `Contains`, with timezone and DST tests. *Go: `time`, value types, methods.*
 - [x] **1.3** `NewBooking`: all booking rules. *Go: `errors.Is`, wrapping with `%w`.*
 - [x] **1.4** `NewMember`, Actor (member, front desk with locations, admin) and cancel rule, `Cancel`. *Go: pointer vs value receivers, small enums with `iota`.*
-- [ ] **1.5** `BookingStore` interface and `BookingService` with injected clock. *Go: implicit interfaces, `context.Context`.*
+- [x] **1.5** `BookingStore` interface and `BookingService` with injected clock. *Go: implicit interfaces, `context.Context`.*
 - [ ] **1.6** In-memory store plus a concurrent booking test. *Go: goroutines, `sync.Mutex`, `sync.WaitGroup`, `-race`.*
 
 ### M2: Postgres
@@ -141,6 +141,11 @@ Agent's calls, open to rejection:
 - **Availability:** booked intervals and opening hours, to the minute. No fixed slot grid.
 - **`Cancel` takes the `Space`:** a `Booking` holds only `spaceID`, so the location has to come from somewhere. Passing the `Space` matches `NewBooking` and lets a mismatched space be refused, where a wrong location ID would silently authorize against the wrong location. Cost: 2.6 has to load the space to cancel.
 - **Ended bookings can't be cancelled:** not a README rule. Cancelling last Tuesday's booking would rewrite who used the room. A booking in progress can still be cancelled, which frees the rest of the slot.
+- **Three small store interfaces:** `BookingStore`, `SpaceStore` and `MemberStore`, because 2.4 already plans a separate space store. Cost: 1.6 implements all three.
+- **`GetSpace` returns a `*time.Location`:** `NewBooking` only needs the timezone. The `Location` type arrives with location management in 3.7.
+- **`Book` takes no `Actor`:** the caller supplies `MemberID`, because identity comes from the session at 4.3 and role checks at 4.6, and the README doesn't say whether staff can book for a member. Until 4.6, nothing in the service stops booking as someone else.
+- **Deleted members can't book:** `Book` refuses them with `ErrMemberDeleted`.
+- **The store guards the cancel write:** cancelling is read, check, write, so two simultaneous cancels can both pass `Booking.Cancel`. `SaveCancellation` must give the loser `ErrAlreadyCancelled`. Real concurrency is tested in 1.6 and 2.6.
 
 ## How each README rule is enforced
 
@@ -236,7 +241,9 @@ Already added: `staticcheck`, as a `go tool` entry.
 - **Opening hours on a clock change:** `WeeklyHours.Contains` checks only the two ends of a booking. If the clock goes back during a booking and a window opens or closes inside the repeated hour, the booking can pass while briefly outside the window. Example: New York, 1 Nov 2026, window 00:00-01:30, booking 01:00 EDT to 01:20 EST. A test pins this behavior. The fix is a loop over `Time.ZoneBounds`, not worth the code for one hour a year.
 - **Member soft delete, still open:** `Member.Delete` only records the deletion.
   - Who may delete: no actor check yet. Member management arrives in 3.7 and role checks in 4.6.
-  - Booking as a deleted member: `NewBooking` takes only a `MemberID`, so it can't see the member. The check belongs in the service (1.5 or later), and login must refuse deleted members (4.2).
+  - Booking as a deleted member: `BookingService.Book` refuses it. Login must also refuse deleted members (4.2).
   - Future bookings of a deleted member: they stay active and hold their slots. Whether deleting should cancel them is a question for 3.7.
   - Email reuse: the unique email index in 2.2 must decide whether a deleted member's email can register again. A partial index (`WHERE deleted_at IS NULL`) allows it.
   - Personal data: soft delete keeps the name and email. Erasing them on request is not covered.
+- **Unexported domain fields:** `Booking`, `Space` and `Member` keep their fields unexported, so `internal/postgres` can't read them or rebuild them from a row. That needs accessors and a rebuild function by 2.4.
+- **Booking IDs can be probed:** `BookingService.Cancel` returns `ErrBookingNotFound` before it checks permission, so a member can tell which booking IDs exist within their own operator. Revisit at 3.6.
