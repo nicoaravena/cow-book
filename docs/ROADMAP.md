@@ -32,17 +32,19 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [x] **1.2** Weekly opening hours and `Contains`, with timezone and DST tests. *Go: `time`, value types, methods.*
 - [x] **1.3** `NewBooking`: all booking rules. *Go: `errors.Is`, wrapping with `%w`.*
 - [x] **1.4** `NewMember`, Actor (member, front desk with locations, admin) and cancel rule, `Cancel`. *Go: pointer vs value receivers, small enums with `iota`.*
-- [x] **1.5** `BookingStore` interface and `BookingService` with injected clock. *Go: implicit interfaces, `context.Context`.*
-- [ ] **1.6** In-memory store plus a concurrent booking test. *Go: goroutines, `sync.Mutex`, `sync.WaitGroup`, `-race`.*
+- [x] **1.5** `BookingStore` interface and `BookingService` with injected clock. *Go: implicit interfaces, `context.Context`.* `Book` takes no `Actor` here; 1.6 adds it.
+- [ ] **1.6** Who can book, and staff bookings awaiting approval. `Book(ctx, actor, spaceID, p)`: a member books only for themselves, front desk for any member at their assigned locations, an admin for any member. A staff-made booking starts pending, with an approval deadline 24 hours after creation or at the booking's start, whichever comes first. `Booking.Approve(actor, now)` lets only that member approve, before the deadline and while not cancelled; the service gets `Approve`. Declining is the existing `Cancel`. *Go: state derived from zero-value timestamps, unexported helper methods.*
+- [ ] **1.7** Deleting a member. `MemberService.Delete` marks the member deleted and cancels every booking of theirs that hasn't ended, pending ones included, through an unexported domain method that skips the actor rules (the system cancels, not a person). `Book`, `Cancel` and `Approve` refuse a deleted member acting as a member. One store method saves the deletion and the cancellations together, so Postgres can use one transaction. *Go: slices of values vs pointers, changing elements in a loop.*
+- [ ] **1.8** In-memory store plus a concurrent booking test, also covering `Approve`, member deletion and a pending booking holding its slot. *Go: goroutines, `sync.Mutex`, `sync.WaitGroup`, `-race`.*
 
 ### M2: Postgres
 
 - [ ] **2.1** `compose.yaml`, goose, platform migration: `tenants` and the `shared` schema. *Go: `go tool` directive.*
 - [ ] **2.2** Tenant migration (locations, spaces, members) and a provisioning function that creates `tenant_<id>` and migrates it, with cleanup on failure. Must confirm goose works per schema (see [Database roles](#database-roles)). *Go: `embed`, `database/sql` vs pgx, `pgx.Identifier`.*
-- [ ] **2.3** Bookings tenant migration with the exclusion constraint, shown working with raw SQL.
+- [ ] **2.3** Bookings tenant migration with the exclusion constraint, shown working with raw SQL. Also stores who made the booking, the approval deadline and the approval time. The constraint ignores only cancelled rows, so pending bookings hold their slot.
 - [ ] **2.4** sqlc setup, pgx pool, `WithTenant` transaction wrapper, space store. A test proves `search_path` doesn't carry over on a reused connection. *Go: closures for transaction scope, generated code, build tags.*
-- [ ] **2.5** Booking store: `23P01` maps to `ErrSlotTaken`. Same contract tests as the in-memory store, then many goroutines racing for one slot. *Go: `errors.As`, subtests, shared test helpers.*
-- [ ] **2.6** Cancel in a transaction; the slot is bookable again. *Go: `defer` with rollback.*
+- [ ] **2.5** Booking store: `23P01` maps to `ErrSlotTaken`. Same contract tests as the in-memory store, then many goroutines racing for one slot. Lazy expiry: in the same transaction, `CreateBooking` first cancels lapsed pending bookings that overlap the new one, because a constraint can't use `now()`; approving checks the deadline the same way. *Go: `errors.As`, subtests, shared test helpers.*
+- [ ] **2.6** Cancel in a transaction; the slot is bookable again. Member deletion in one transaction: mark the member deleted and cancel their bookings. A booking insert refuses a member deleted at the same moment (lock the member row, or insert only while the member isn't deleted), proven by a test. *Go: `defer` with rollback.*
 
 ### M3: HTTP API
 
@@ -50,9 +52,9 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [ ] **3.2** `cowbook migrate` and `cowbook create-tenant` subcommands for local use. *Go: `flag`, subcommands, exit codes.*
 - [ ] **3.3** chi, tenant middleware, `GET spaces`, JSON helpers. *Go: handlers, middleware as function wrapping, `httptest`.*
 - [ ] **3.4** Availability for a space and date.
-- [ ] **3.5** `POST bookings` with error-to-status mapping (409, 422). Uses a **temporary** `X-Member-ID` header, removed in 4.3.
-- [ ] **3.6** Cancel, my bookings, the day's bookings, booking history.
-- [ ] **3.7** Management endpoints for locations, spaces and members.
+- [ ] **3.5** `POST bookings` with error-to-status mapping (409, 422). Uses a **temporary** `X-Member-ID` header, removed in 4.3, which builds a member `Actor`. Staff booking for a member waits for staff login.
+- [ ] **3.6** Cancel, approve, my bookings (pending ones with their deadline), the day's bookings, booking history.
+- [ ] **3.7** Management endpoints for locations, spaces and members. Deleting a member goes through `MemberService.Delete`, which cancels their bookings.
 
 ### M4: Login
 
@@ -61,7 +63,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [ ] **4.3** Auth middleware, actor in request context, remove the temporary header. *Go: context keys.*
 - [ ] **4.4** Member self-registration: public endpoint with a basic per-IP limit.
 - [ ] **4.5** Staff accounts: admins add and remove staff and assign front desk locations (`staff_locations` migration).
-- [ ] **4.6** Role and location checks on every route, tested as a table of route by role.
+- [ ] **4.6** Role and location checks on every route, tested as a table of route by role, including staff booking for a member and member-only approval.
 - [ ] **4.7** Temporary password reset with forced change at next login.
 
 ### M5: Tenant isolation and fairness
@@ -84,8 +86,8 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 - [ ] **7.1** Layout, embedded templates, CSS, login page. *Go: `embed`, `html/template` escaping.*
 - [ ] **7.2** Member: availability and booking form.
-- [ ] **7.3** Member: my bookings and cancel.
-- [ ] **7.4** Front desk: the day's bookings at a glance.
+- [ ] **7.3** Member: my bookings and cancel, and approve or decline bookings staff made for them.
+- [ ] **7.4** Front desk: the day's bookings at a glance, with pending ones marked, and booking for a member.
 - [ ] **7.5** Staff: manage locations, spaces, members and staff accounts.
 - [ ] **7.6** Operator signup, member registration and support pages.
 - [ ] **7.7** Run-through documented in the README: operator signs up, adds a location and space, member registers and books, sees a conflict, cancels, support suspends the operator.
@@ -121,6 +123,8 @@ Decided by the user:
 - **Staff roles:** two operator roles, admin and front desk. Admins manage staff accounts and cover the whole operator. Front desk staff are limited to their assigned locations.
 - **Support view:** the operator list shows staff counts, plan and status only. No member or booking totals, so the database guarantee stays absolute.
 - **Member deletion:** members are soft-deleted. The record stays, so bookings and history still point at a real member.
+- **Booking for a member:** staff can book for a member, and the member must approve it. Until then the booking is pending and holds the slot. If the member doesn't approve by the approval deadline, it lapses and frees the slot.
+- **Deleted members:** they can't cancel bookings. Deleting a member cancels their bookings automatically.
 
 Proposed by Agent and accepted in conversation:
 
@@ -143,8 +147,12 @@ Agent's calls, open to rejection:
 - **Ended bookings can't be cancelled:** not a README rule. Cancelling last Tuesday's booking would rewrite who used the room. A booking in progress can still be cancelled, which frees the rest of the slot.
 - **Three small store interfaces:** `BookingStore`, `SpaceStore` and `MemberStore`, because 2.4 already plans a separate space store. Cost: 1.6 implements all three.
 - **`GetSpace` returns a `*time.Location`:** `NewBooking` only needs the timezone. The `Location` type arrives with location management in 3.7.
-- **`Book` takes no `Actor`:** the caller supplies `MemberID`, because identity comes from the session at 4.3 and role checks at 4.6, and the README doesn't say whether staff can book for a member. Until 4.6, nothing in the service stops booking as someone else.
-- **Deleted members can't book:** `Book` refuses them with `ErrMemberDeleted`.
+- **Approval deadline:** 24 hours after a staff booking is made, or the booking's start if that comes first. A constant in code; it could vary by plan later.
+- **Every staff booking needs approval,** admin-made ones included.
+- **Front desk book only at their locations,** matching the cancel rule.
+- **Declining is cancelling:** the member declines a pending booking with `Cancel`, with no separate state.
+- **Deletion cancels bookings in progress too,** which frees the rest of the slot. Ended bookings stay as they are, to keep the history true.
+- **Lazy expiry:** lapsed pending bookings are cancelled when a new booking needs their slot, not by a background job.
 - **The store guards the cancel write:** cancelling is read, check, write, so two simultaneous cancels can both pass `Booking.Cancel`. `SaveCancellation` must give the loser `ErrAlreadyCancelled`. Real concurrency is tested in 1.6 and 2.6.
 
 ## How each README rule is enforced
@@ -241,9 +249,10 @@ Already added: `staticcheck`, as a `go tool` entry.
 - **Opening hours on a clock change:** `WeeklyHours.Contains` checks only the two ends of a booking. If the clock goes back during a booking and a window opens or closes inside the repeated hour, the booking can pass while briefly outside the window. Example: New York, 1 Nov 2026, window 00:00-01:30, booking 01:00 EDT to 01:20 EST. A test pins this behavior. The fix is a loop over `Time.ZoneBounds`, not worth the code for one hour a year.
 - **Member soft delete, still open:** `Member.Delete` only records the deletion.
   - Who may delete: no actor check yet. Member management arrives in 3.7 and role checks in 4.6.
-  - Booking as a deleted member: `BookingService.Book` refuses it. Login must also refuse deleted members (4.2).
-  - Future bookings of a deleted member: they stay active and hold their slots. Whether deleting should cancel them is a question for 3.7.
+  - Booking as a deleted member: `BookingService.Book` refuses it now; 1.7 extends this to cancelling and approving. Login must also refuse deleted members (4.2).
   - Email reuse: the unique email index in 2.2 must decide whether a deleted member's email can register again. A partial index (`WHERE deleted_at IS NULL`) allows it.
   - Personal data: soft delete keeps the name and email. Erasing them on request is not covered.
+- **Pending bookings can block slots:** staff can hold a slot for up to 24 hours with a booking the member never approves. Visible in the day's view; a shorter deadline or a per-staff limit would be the fix.
+- **Deleting and booking at once:** until 2.6, a booking for a member can slip in while that member is being deleted.
 - **Unexported domain fields:** `Booking`, `Space` and `Member` keep their fields unexported, so `internal/postgres` can't read them or rebuild them from a row. That needs accessors and a rebuild function by 2.4.
 - **Booking IDs can be probed:** `BookingService.Cancel` returns `ErrBookingNotFound` before it checks permission, so a member can tell which booking IDs exist within their own operator. Revisit at 3.6.
