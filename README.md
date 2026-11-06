@@ -45,3 +45,11 @@ Across the platform:
 ## What a solution must answer
 
 How should the platform be structured so that it serves operators of every size from one product, keeps each operator's data isolated, prevents customers from affecting each other, and remains economical to run as the number of operators grows?
+
+## Optional extras
+
+- Add docs that allow to be rendered in a static page (like gitbooks)
+- Add CI/CD using gitlab-ci and/or github actions
+- Add use of containers (docker or k8s)
+- Add infrastructure as a code (terraform)
+- Add opentelemetry (netdata, grafana or other)
