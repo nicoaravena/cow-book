@@ -33,6 +33,9 @@ type BookingStore interface {
 	// loser gets ErrAlreadyCancelled or ErrNotPending. It returns
 	// ErrBookingNotFound if there is no such booking.
 	SaveApproval(ctx context.Context, b Booking) error
+	// ListMemberBookingsEndingAfter returns the member's bookings that are not
+	// cancelled and end after t.
+	ListMemberBookingsEndingAfter(ctx context.Context, memberID int64, t time.Time) ([]Booking, error)
 }
 
 // SpaceStore keeps spaces.
@@ -47,6 +50,12 @@ type MemberStore interface {
 	// GetMember returns the member even if deleted, so the caller can tell the
 	// two cases apart. It returns ErrMemberNotFound if there is no such member.
 	GetMember(ctx context.Context, id int64) (Member, error)
+	// SaveDeletion stores a member that Delete has changed together with the
+	// bookings cancelled because of it, all or nothing. Two deletions can race,
+	// so the store decides the winner: the loser gets ErrMemberDeleted. A
+	// booking someone else cancelled meanwhile stays as it is, with no error.
+	// It returns ErrMemberNotFound if there is no such member.
+	SaveDeletion(ctx context.Context, m Member, cancelled []Booking) error
 }
 
 // BookingService carries out booking requests: it loads what the domain rules
@@ -91,9 +100,31 @@ func (s *BookingService) Book(ctx context.Context, actor Actor, spaceID int64, p
 	return s.bookings.CreateBooking(ctx, b)
 }
 
+// refuseDeletedMember returns ErrMemberDeleted if actor is a deleted member.
+// Staff pass without a lookup. It is about the actor themselves, so it can run
+// before anything else without telling them anything new.
+func (s *BookingService) refuseDeletedMember(ctx context.Context, actor Actor) error {
+	if actor.role != roleMember {
+		return nil
+	}
+	m, err := s.members.GetMember(ctx, actor.id)
+	if err != nil {
+		return err
+	}
+	if !m.deletedAt.IsZero() {
+		return ErrMemberDeleted
+	}
+	return nil
+}
+
 // Cancel cancels the booking on behalf of actor and returns it as stored. The
-// rules are in Booking.Cancel. Errors from the stores come back as they are.
+// rules are in Booking.Cancel, and a deleted member can't cancel. Errors from
+// the stores come back as they are.
 func (s *BookingService) Cancel(ctx context.Context, actor Actor, bookingID int64) (Booking, error) {
+	if err := s.refuseDeletedMember(ctx, actor); err != nil {
+		return Booking{}, err
+	}
+
 	b, err := s.bookings.GetBooking(ctx, bookingID)
 	if err != nil {
 		return Booking{}, err
@@ -114,9 +145,13 @@ func (s *BookingService) Cancel(ctx context.Context, actor Actor, bookingID int6
 }
 
 // Approve records actor's approval of a pending booking and returns it as
-// stored. The rules are in Booking.Approve. Errors from the stores come back as
-// they are.
+// stored. The rules are in Booking.Approve, and a deleted member can't approve.
+// Errors from the stores come back as they are.
 func (s *BookingService) Approve(ctx context.Context, actor Actor, bookingID int64) (Booking, error) {
+	if err := s.refuseDeletedMember(ctx, actor); err != nil {
+		return Booking{}, err
+	}
+
 	b, err := s.bookings.GetBooking(ctx, bookingID)
 	if err != nil {
 		return Booking{}, err

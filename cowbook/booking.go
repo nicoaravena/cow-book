@@ -118,9 +118,17 @@ var (
 // to keep the history true. It has a pointer receiver because it changes the
 // booking. On error the booking is unchanged.
 func (b *Booking) Cancel(actor Actor, space Space, now time.Time) error {
-	switch {
-	case space.ID != b.spaceID || !actor.actsFor(b.memberID, space.locationID):
+	if space.ID != b.spaceID || !actor.actsFor(b.memberID, space.locationID) {
 		return ErrCancelNotAllowed
+	}
+	return b.cancel(now)
+}
+
+// cancel holds Cancel's rules without the actor check, for when the system
+// cancels and not a person, as when a member is deleted. On error the booking
+// is unchanged.
+func (b *Booking) cancel(now time.Time) error {
+	switch {
 	case !b.cancelledAt.IsZero():
 		return ErrAlreadyCancelled
 	case !now.Before(b.end):

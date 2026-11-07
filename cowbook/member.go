@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// Errors returned by NewMember, Delete and BookingService.Book. Callers compare
-// them with errors.Is.
+// Errors returned by NewMember, Delete, MemberService.Delete and the
+// BookingService methods. Callers compare them with errors.Is.
 var (
 	ErrMemberNameRequired = errors.New("member name is required")
 	ErrInvalidMemberEmail = errors.New("member email is not valid")
@@ -72,4 +72,19 @@ func (m *Member) Delete(now time.Time) error {
 	m.deletedAt = now
 	m.updatedAt = now
 	return nil
+}
+
+// cancelBookings cancels a deleted member's bookings: every one in bs that
+// hasn't ended or been cancelled, pending ones and ones in progress included.
+// It changes the elements of bs in place and returns copies of those it
+// cancelled. The loop goes by index because a range value is a copy, and
+// cancelling the copy would leave bs as it was.
+func cancelBookings(bs []Booking, now time.Time) []Booking {
+	var cancelled []Booking
+	for i := range bs {
+		if bs[i].cancel(now) == nil {
+			cancelled = append(cancelled, bs[i])
+		}
+	}
+	return cancelled
 }

@@ -8,8 +8,8 @@ import (
 )
 
 // fakeStore stands in for all three stores. It keeps what it is given in maps
-// and records every call's context. Set createErr, saveErr or approveErr to
-// make that call fail, the way a real store would on a lost race.
+// and records every call's context. Set createErr, saveErr, approveErr or
+// deleteErr to make that call fail, the way a real store would on a lost race.
 type fakeStore struct {
 	spaces     map[int64]Space
 	loc        *time.Location
@@ -18,9 +18,12 @@ type fakeStore struct {
 	createErr  error
 	saveErr    error
 	approveErr error
+	deleteErr  error
 	created    []Booking
 	saved      []Booking
 	approved   []Booking
+	deleted    []Member
+	deletedFor [][]Booking // the cancelled bookings of each SaveDeletion call
 	contexts   []context.Context
 }
 
@@ -82,8 +85,34 @@ func (f *fakeStore) GetMember(ctx context.Context, id int64) (Member, error) {
 	return m, nil
 }
 
-// newFakeStore returns a store holding storedSpace, member 3 and
-// cancellableBooking, with the location in UTC.
+func (f *fakeStore) ListMemberBookingsEndingAfter(ctx context.Context, memberID int64, t time.Time) ([]Booking, error) {
+	f.contexts = append(f.contexts, ctx)
+	var bs []Booking
+	for _, b := range f.bookings {
+		if b.memberID == memberID && b.end.After(t) && b.cancelledAt.IsZero() {
+			bs = append(bs, b)
+		}
+	}
+	return bs, nil
+}
+
+func (f *fakeStore) SaveDeletion(ctx context.Context, m Member, cancelled []Booking) error {
+	f.contexts = append(f.contexts, ctx)
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.members[m.ID] = m
+	for _, b := range cancelled {
+		f.bookings[b.ID] = b
+	}
+	f.deleted = append(f.deleted, m)
+	f.deletedFor = append(f.deletedFor, cancelled)
+	return nil
+}
+
+// newFakeStore returns a store holding storedSpace, members 3 and 4, and
+// cancellableBooking, with the location in UTC. Member 4 is there to act on
+// member 3's booking and be refused.
 func newFakeStore(t *testing.T) *fakeStore {
 	t.Helper()
 	m, err := NewMember(validMemberParams(), bookingNow)
@@ -91,13 +120,15 @@ func newFakeStore(t *testing.T) *fakeStore {
 		t.Fatalf("NewMember() error = %v, want nil", err)
 	}
 	m.ID = 3
+	other := m
+	other.ID = 4
 
 	s := storedSpace(t)
 	b := cancellableBooking(t)
 	return &fakeStore{
 		spaces:   map[int64]Space{s.ID: s},
 		loc:      time.UTC,
-		members:  map[int64]Member{m.ID: m},
+		members:  map[int64]Member{m.ID: m, other.ID: other},
 		bookings: map[int64]Booking{b.ID: b},
 	}
 }
@@ -484,7 +515,7 @@ func TestServicePassesContextToEveryStoreCall(t *testing.T) {
 				_, err := svc.Cancel(ctx, MemberActor(3), 11)
 				return err
 			},
-			wantCalls: 3, // GetBooking, GetSpace, SaveCancellation
+			wantCalls: 4, // GetMember, GetBooking, GetSpace, SaveCancellation
 		},
 		{
 			name: "Approve",
@@ -492,7 +523,7 @@ func TestServicePassesContextToEveryStoreCall(t *testing.T) {
 				_, err := svc.Approve(ctx, MemberActor(3), 11)
 				return err
 			},
-			wantCalls: 2, // GetBooking, SaveApproval
+			wantCalls: 3, // GetMember, GetBooking, SaveApproval
 		},
 	}
 
@@ -513,5 +544,71 @@ func TestServicePassesContextToEveryStoreCall(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// deleteMember3 marks member 3 deleted in store, the way MemberService.Delete
+// leaves it, but keeps their bookings as they are.
+func deleteMember3(t *testing.T, store *fakeStore) {
+	t.Helper()
+	m := store.members[3]
+	if err := m.Delete(bookingNow); err != nil {
+		t.Fatalf("Delete() error = %v, want nil", err)
+	}
+	store.members[3] = m
+}
+
+// A deleted member can't act, even on a booking that slipped past the deletion.
+func TestDeletedMemberIsRefused(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(svc *BookingService) error
+	}{
+		{"Cancel", func(svc *BookingService) error {
+			_, err := svc.Cancel(context.Background(), MemberActor(3), 11)
+			return err
+		}},
+		{"Approve", func(svc *BookingService) error {
+			_, err := svc.Approve(context.Background(), MemberActor(3), 11)
+			return err
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, store := newApproveTestService(t, bookingNow)
+			deleteMember3(t, store)
+
+			err := tt.call(svc)
+			if !errors.Is(err, ErrMemberDeleted) {
+				t.Errorf("error = %v, want %v", err, ErrMemberDeleted)
+			}
+			if len(store.saved) != 0 || len(store.approved) != 0 {
+				t.Errorf("store saved %d cancellations and %d approvals, want 0", len(store.saved), len(store.approved))
+			}
+		})
+	}
+}
+
+func TestStaffCanCancelDeletedMembersBooking(t *testing.T) {
+	store := newFakeStore(t)
+	deleteMember3(t, store)
+	svc := newTestService(store, bookingNow)
+
+	if _, err := svc.Cancel(context.Background(), AdminActor(1), 11); err != nil {
+		t.Fatalf("Cancel() error = %v, want nil", err)
+	}
+	if len(store.saved) != 1 {
+		t.Errorf("store saved %d bookings, want 1", len(store.saved))
+	}
+}
+
+func TestServiceCancelUnknownMemberActor(t *testing.T) {
+	store := newFakeStore(t)
+	svc := newTestService(store, bookingNow)
+
+	_, err := svc.Cancel(context.Background(), MemberActor(999), 11)
+	if !errors.Is(err, ErrMemberNotFound) {
+		t.Errorf("Cancel() error = %v, want %v", err, ErrMemberNotFound)
 	}
 }

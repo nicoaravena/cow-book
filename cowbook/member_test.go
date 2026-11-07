@@ -117,3 +117,40 @@ func TestMemberDeleteTwice(t *testing.T) {
 		t.Errorf("member = %+v, want it unchanged: %+v", m, before)
 	}
 }
+
+func TestCancelBookingsOnDeletion(t *testing.T) {
+	end := validBookingParams().End
+	now := end.Add(-30 * time.Minute) // the 10:00-11:00 bookings are in progress
+
+	cancelled := cancellableBooking(t)
+	if err := cancelled.Cancel(MemberActor(3), storedSpace(t), bookingNow); err != nil {
+		t.Fatalf("Cancel() error = %v, want nil", err)
+	}
+	ended := cancellableBooking(t)
+	ended.end = now
+
+	bs := []Booking{cancellableBooking(t), pendingBooking(t), cancelled, ended}
+	bs[0].ID, bs[1].ID, bs[2].ID, bs[3].ID = 21, 22, 23, 24
+
+	got := cancelBookings(bs, now)
+
+	if len(got) != 2 || got[0].ID != 21 || got[1].ID != 22 {
+		t.Fatalf("cancelBookings() = %+v, want bookings 21 and 22", got)
+	}
+	for _, b := range got {
+		if !b.cancelledAt.Equal(now) {
+			t.Errorf("booking %d cancelledAt = %v, want %v", b.ID, b.cancelledAt, now)
+		}
+	}
+	// The input elements change in place, so the loop must go by index: a
+	// range value is a copy of the element.
+	if !bs[0].cancelledAt.Equal(now) || !bs[1].cancelledAt.Equal(now) {
+		t.Errorf("input bookings 21 and 22 not cancelled in place: %+v", bs[:2])
+	}
+	if !bs[2].cancelledAt.Equal(bookingNow) {
+		t.Errorf("already cancelled booking cancelledAt = %v, want it unchanged at %v", bs[2].cancelledAt, bookingNow)
+	}
+	if !bs[3].cancelledAt.IsZero() {
+		t.Errorf("ended booking cancelledAt = %v, want zero", bs[3].cancelledAt)
+	}
+}
