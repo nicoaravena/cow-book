@@ -10,12 +10,13 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 - Agent writes one small step at a time, about 50-200 lines plus tests.
 - Each step delivers the code, its tests, the commands to run, and a short note on the Go ideas it introduces.
+- Each step also delivers its concepts page in `docs/src/concepts/`, adds it to `docs/src/SUMMARY.md` and the topic index, and updates the reference pages in `docs/src/reference/` that its code touches.
 - **Each step ends with a stop for review.** The user reads and approves it before the next step starts.
 - The user commits, or Agent commits when asked. Per the global `AGENTS.md`, commits carry **no** `Co-Authored-By` line for the agent.
 
 ### Checks
 
-- Every step: `make test` and `make lint` (`go vet`, `gofmt -l`, `staticcheck`).
+- Every step: `make test` and `make lint` (`go vet`, `gofmt -l`, `staticcheck`), and `make docs` builds with no warnings.
 - From M2: `make test-integration`.
 - From M3: exercise the running server with `curl`, with commands given in each step.
 - At the end: the 7.7 run-through in a browser, and a checklist mapping each README rule to the test that proves it.

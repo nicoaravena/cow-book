@@ -1,0 +1,16 @@
+[book]
+title = "Cowbook: learning Go"
+authors = ["Nicolas Aravena"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+theme = "./theme"
+default-theme = "late"
+preferred-dark-theme = "mocha"
+additional-css = ["./theme/catppuccin.css"]
+git-repository-url = "https://gitlab.com/nicoaravena/cow-book"
