@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally.
 
-**Next up:** step 1.8.
+**Next up:** step 2.1.
 
 ## How to work
 
@@ -36,7 +36,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [x] **1.5** `BookingStore` interface and `BookingService` with injected clock. *Go: implicit interfaces, `context.Context`.* `Book` takes no `Actor` here; 1.6 adds it.
 - [x] **1.6** Who can book, and staff bookings awaiting approval. `Book(ctx, actor, spaceID, p)`: a member books only for themselves, front desk for any member at their assigned locations, an admin for any member. A staff-made booking starts pending, with an approval deadline 24 hours after creation or at the booking's start, whichever comes first. `Booking.Approve(actor, now)` lets only that member approve, before the deadline and while not cancelled; the service gets `Approve`. Declining is the existing `Cancel`. *Go: state derived from zero-value timestamps, unexported helper methods.*
 - [x] **1.7** Deleting a member. `MemberService.Delete` marks the member deleted and cancels every booking of theirs that hasn't ended, pending ones included, through an unexported domain method that skips the actor rules (the system cancels, not a person). `Book`, `Cancel` and `Approve` refuse a deleted member acting as a member. One store method saves the deletion and the cancellations together, so Postgres can use one transaction. *Go: slices of values vs pointers, changing elements in a loop.*
-- [ ] **1.8** In-memory store plus a concurrent booking test, also covering `Approve`, member deletion and a pending booking holding its slot. *Go: goroutines, `sync.Mutex`, `sync.WaitGroup`, `-race`.*
+- [x] **1.8** In-memory store plus a concurrent booking test, also covering `Approve`, member deletion and a pending booking holding its slot. *Go: goroutines, `sync.Mutex`, `sync.WaitGroup`, `-race`.*
 
 ### M2: Postgres
 
@@ -157,7 +157,7 @@ Agent's calls, open to rejection:
 - **Deleted members are refused first:** `BookingService.Cancel` and `Approve` look up a member actor before anything else and return `ErrMemberDeleted`. It's about the actor themselves, so it leaks nothing, and it reads better than `ErrAlreadyCancelled`. Staff still cancel a deleted member's bookings. Cost: one more store read per member request.
 - **`SaveDeletion` lives on `MemberStore`:** no fourth interface. Cost: whatever implements `MemberStore` for `BookingService` must implement it too.
 - **`MemberService.Delete` takes no actor yet:** who may delete arrives with member management (3.7) and role checks (4.6).
-- **The store guards the cancel write:** cancelling is read, check, write, so two simultaneous cancels can both pass `Booking.Cancel`. `SaveCancellation` must give the loser `ErrAlreadyCancelled`. Real concurrency is tested in 1.6 and 2.6.
+- **The store guards the cancel write:** cancelling is read, check, write, so two simultaneous cancels can both pass `Booking.Cancel`. `SaveCancellation` must give the loser `ErrAlreadyCancelled`. Real concurrency is tested in 1.8 and 2.6.
 
 ## How each README rule is enforced
 
@@ -259,6 +259,7 @@ Already added: `staticcheck`, as a `go tool` entry.
   - Personal data: soft delete keeps the name and email. Erasing them on request is not covered.
 - **Pending bookings can block slots:** staff can hold a slot for up to 24 hours with a booking the member never approves. Visible in the day's view; a shorter deadline or a per-staff limit would be the fix.
 - **Deleting and booking at once:** until 2.6, a booking for a member can slip in while that member is being deleted.
-- **Unexported domain fields:** `Booking`, `Space` and `Member` keep their fields unexported, so `internal/postgres` can't read them or rebuild them from a row. That needs accessors and a rebuild function by 2.4.
+- **Unexported domain fields:** `Booking`, `Space` and `Member` keep their fields unexported. 1.8 added the read-only accessors `internal/memstore` needs; `internal/postgres` still needs the rest of the accessors and a function to rebuild each type from a row by 2.4.
 - **Booking IDs can be probed:** `BookingService.Cancel` and `BookingService.Approve` return `ErrBookingNotFound` before they check permission, so a member can tell which booking IDs exist within their own operator. Revisit at 3.6.
+- **The in-memory store is simpler than Postgres:** `internal/memstore` has no lazy expiry, doesn't refuse a booking for a member deleted at the same moment, and replaces whole bookings on save, so a cancel racing an approval drops the approval time. Fine for tests; the Postgres store must not copy these shortcuts (2.5, 2.6).
 - **Staff booking that starts right away:** its approval deadline is its start, which is now, so it can never be approved. It holds the slot until lazy expiry cancels it. Refusing staff bookings that start within some minimum lead time would fix it.

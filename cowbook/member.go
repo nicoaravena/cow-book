@@ -25,6 +25,9 @@ type Member struct {
 	deletedAt time.Time // zero until deleted
 }
 
+// Deleted reports whether the member has been deleted.
+func (m Member) Deleted() bool { return !m.deletedAt.IsZero() }
+
 // MemberParams holds the values needed to create a Member.
 type MemberParams struct {
 	Name  string

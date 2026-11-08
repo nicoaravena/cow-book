@@ -595,3 +595,42 @@ func TestApproveRefusalLeavesBookingUnchanged(t *testing.T) {
 		})
 	}
 }
+
+func TestBookingAccessors(t *testing.T) {
+	p := validBookingParams()
+	b := pendingBooking(t)
+
+	if b.SpaceID() != 7 || b.MemberID() != 3 {
+		t.Errorf("SpaceID(), MemberID() = %d, %d, want 7, 3", b.SpaceID(), b.MemberID())
+	}
+	if !b.Start().Equal(p.Start) || !b.End().Equal(p.End) {
+		t.Errorf("Start(), End() = %v, %v, want %v, %v", b.Start(), b.End(), p.Start, p.End)
+	}
+
+	later := bookingNow.Add(time.Hour)
+	tests := []struct {
+		name          string
+		change        func(b *Booking) error
+		wantCancelled bool
+		wantApproved  bool
+	}{
+		{"pending", func(b *Booking) error { return nil }, false, false},
+		{"approved", func(b *Booking) error { return b.Approve(MemberActor(3), later) }, false, true},
+		{"cancelled", func(b *Booking) error { return b.Cancel(MemberActor(3), storedSpace(t), later) }, true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := pendingBooking(t)
+			if err := tt.change(&b); err != nil {
+				t.Fatalf("change error = %v, want nil", err)
+			}
+			if b.Cancelled() != tt.wantCancelled {
+				t.Errorf("Cancelled() = %v, want %v", b.Cancelled(), tt.wantCancelled)
+			}
+			if b.Approved() != tt.wantApproved {
+				t.Errorf("Approved() = %v, want %v", b.Approved(), tt.wantApproved)
+			}
+		})
+	}
+}

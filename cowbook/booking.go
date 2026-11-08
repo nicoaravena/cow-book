@@ -45,6 +45,29 @@ type Booking struct {
 	cancelledAt      time.Time // zero until cancelled
 }
 
+// The accessors below let stores outside this package read a booking without
+// being able to change it.
+
+// SpaceID returns the ID of the booked space.
+func (b Booking) SpaceID() int64 { return b.spaceID }
+
+// MemberID returns the ID of the member the booking is for.
+func (b Booking) MemberID() int64 { return b.memberID }
+
+// Start returns when the booking starts.
+func (b Booking) Start() time.Time { return b.start }
+
+// End returns when the booking ends. The booking does not include End, so
+// another booking may start right then.
+func (b Booking) End() time.Time { return b.end }
+
+// Cancelled reports whether the booking has been cancelled.
+func (b Booking) Cancelled() bool { return !b.cancelledAt.IsZero() }
+
+// Approved reports whether the member has approved a booking staff made for
+// them. It is false for a booking that never needed approval.
+func (b Booking) Approved() bool { return !b.approvedAt.IsZero() }
+
 // BookingParams holds the values needed to create a Booking.
 type BookingParams struct {
 	MemberID  int64

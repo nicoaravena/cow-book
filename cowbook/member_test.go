@@ -154,3 +154,20 @@ func TestCancelBookingsOnDeletion(t *testing.T) {
 		t.Errorf("ended booking cancelledAt = %v, want zero", bs[3].cancelledAt)
 	}
 }
+
+func TestMemberDeleted(t *testing.T) {
+	m, err := NewMember(validMemberParams(), memberNow)
+	if err != nil {
+		t.Fatalf("NewMember() error = %v, want nil", err)
+	}
+	if m.Deleted() {
+		t.Error("Deleted() = true on a new member, want false")
+	}
+
+	if err := m.Delete(memberNow); err != nil {
+		t.Fatalf("Delete() error = %v, want nil", err)
+	}
+	if !m.Deleted() {
+		t.Error("Deleted() = false after Delete, want true")
+	}
+}
