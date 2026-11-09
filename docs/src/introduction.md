@@ -3,7 +3,7 @@
 This book goes with the project in [the repository](https://gitlab.com/nicoaravena/cow-book): a
 multi-tenant coworking booking platform, built mainly to **learn Go**. The project
 [README](https://gitlab.com/nicoaravena/cow-book/-/blob/main/README.md) describes the problem, and
-the [Roadmap](ROADMAP.md) lays out the steps.
+the [Roadmap](roadmap.md) lays out the steps.
 
 ## How to read it
 

@@ -1,0 +1,69 @@
+# Overview
+
+All domain code and services live in one package, `cowbook`. Storage adapters live under
+`internal/` and implement interfaces that `cowbook` defines. `cowbook` imports nothing from them,
+nor any database or HTTP package.
+
+```
+delivery (M3+: httpapi, web, main)
+        |
+        v
+services     BookingService, MemberService          cowbook/service.go, memberservice.go
+        |
+        v
+domain       Space, WeeklyHours, Booking,           cowbook/space.go, hours.go, booking.go,
+             Member, Actor                          member.go, actor.go
+        ^
+        |  implements BookingStore, SpaceStore, MemberStore
+adapters     internal/memstore (now), internal/postgres (M2)
+```
+
+## Packages
+
+| Package | Holds |
+| --- | --- |
+| `cowbook` | Domain types and rules, the services, the store interfaces, every sentinel error |
+| `internal/memstore` | In-memory store for tests and local runs. See [Stores](stores.md) |
+
+## Types at a glance
+
+| Type | Page | What it is |
+| --- | --- | --- |
+| `Space`, `SpaceKind`, `SpaceParams` | [Space](space.md) | A bookable place at a location |
+| `ClockTime`, `OpeningWindow`, `WeeklyHours` | [Opening hours](opening-hours.md) | When a space is open in a normal week |
+| `Booking`, `BookingParams` | [Booking](booking.md) | A member's reservation of a space for a period |
+| `Actor` | [Actor](actor.md) | Whoever is asking: member, front desk or admin |
+| `Member`, `MemberParams` | [Member](member.md) | A person who books at one operator |
+| `BookingService`, `MemberService` | [Services](services.md) | Load, apply the rules, save |
+| `BookingStore`, `SpaceStore`, `MemberStore` | [Stores](stores.md) | What the services need from storage |
+
+## Conventions
+
+These hold for every type in `cowbook`.
+
+- **Constructors validate.** `NewSpace`, `NewWeeklyHours`, `NewClockTime`, `NewBooking` and
+  `NewMember` return the first rule the input breaks, and the zero value with it. A value from a
+  constructor is always valid.
+- **Fields are unexported** except `ID`, which the store sets. Stores outside the package read
+  through accessor methods. Nothing outside `cowbook` can change state except through the domain's
+  own methods.
+- **`ID` is 0 until stored.** IDs are `int64`, matching Postgres `bigint`.
+- **Time comes in.** Nothing in `cowbook` calls `time.Now()`. Constructors and methods take `now`;
+  services take a clock function.
+- **State from timestamps.** A zero `time.Time` means "not happened": `cancelledAt`, `approvedAt`,
+  `deletedAt`. There are no status fields.
+- **Changing methods have pointer receivers and change nothing on error.** `Booking.Cancel`,
+  `Booking.Approve`, `Member.Delete`.
+- **Permission first.** Methods that check an `Actor` do so before any other rule, so a refused
+  actor learns nothing about the target.
+- **Errors are sentinels** compared with `errors.Is`, never `==`: some come wrapped with details.
+  See [Errors](errors.md).
+- **Overlaps are the store's job.** No domain rule sees other bookings.
+
+## Reading the code
+
+```sh
+go doc ./cowbook            # package overview
+go doc ./cowbook Booking    # one type and its methods
+go doc -all ./cowbook       # everything
+```

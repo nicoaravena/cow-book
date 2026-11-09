@@ -9,7 +9,8 @@ build-dir = "book"
 create-missing = false
 
 [output.html]
-theme = "./theme"
+site-url = "/cow-book/"
+theme = "theme"
 default-theme = "late"
 preferred-dark-theme = "mocha"
 additional-css = ["./theme/catppuccin.css"]
