@@ -86,7 +86,7 @@ Both `Cancel` and `Approve` check permission first and leave the booking unchang
 
 ## Accessors
 
-Read-only, for stores outside the package:
+Read-only, for stores and the REPL outside the package:
 
 | Method | Returns |
 | --- | --- |
@@ -95,8 +95,9 @@ Read-only, for stores outside the package:
 | `Start()`, `End()` | The period; `End` is exclusive |
 | `Cancelled()` | Whether `cancelledAt` is set |
 | `Approved()` | Whether `approvedAt` is set. `false` for a booking that never needed approval |
+| `ApprovalDeadline()` | When a staff-made booking must be approved by; zero for a member's own booking (1.9) |
 
-Not exposed yet: `attendees`, `bookedBy`, the timestamps themselves, and a way to rebuild a booking
+Not exposed yet: `attendees`, `bookedBy`, the other timestamps, and a way to rebuild a booking
 from a database row (2.4).
 
 ## Known gaps

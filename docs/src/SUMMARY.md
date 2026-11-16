@@ -15,6 +15,7 @@
 - [1.6 Who can book](concepts/1.6-who-can-book.md)
 - [1.7 Deleting a member](concepts/1.7-deleting-a-member.md)
 - [1.8 In-memory store](concepts/1.8-in-memory-store.md)
+- [1.9 REPL](concepts/1.9-repl.md)
 
 # Reference
 
@@ -27,3 +28,4 @@
 - [Services](reference/services.md)
 - [Stores](reference/stores.md)
 - [Errors](reference/errors.md)
+- [REPL](reference/repl.md)

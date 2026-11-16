@@ -2,21 +2,23 @@
 
 This project exists mainly to **learn Go**. The vehicle is the multi-tenant coworking booking platform described in `README.md`.
 
-**Finish line:** every README rule works through an HTTP API plus simple web pages, running locally.
+**Finish line:** every README rule works through an HTTP API plus simple web pages, running locally with `cowbook serve`.
 
-**Next up:** step 2.1.
+**Next up:** step 1.10.
 
 ## How to work
 
 - Agent writes one small step at a time, about 50-200 lines plus tests.
 - Each step delivers the code, its tests, the commands to run, and a short note on the Go ideas it introduces.
 - Each step also delivers its concepts page in `docs/src/concepts/`, adds it to `docs/src/SUMMARY.md` and the topic index, and updates the reference pages in `docs/src/reference/` that its code touches.
+- Each step also delivers a **runnable result** in the one binary, `cmd/cowbook`, which grows every step and is the full app at the last one. Usually that is new or changed commands in `cowbook repl` (`go run ./cmd/cowbook repl`), later new subcommands such as `serve` or `migrate`. The step note lists the commands to type. Steps the binary can't reach yet say what to run instead.
 - **Each step ends with a stop for review.** The user reads and approves it before the next step starts.
 - The user commits, or Agent commits when asked. Per the global `AGENTS.md`, commits carry **no** `Co-Authored-By` line for the agent.
 
 ### Checks
 
 - Every step: `make test` and `make lint` (`go vet`, `gofmt -l`, `staticcheck`), and `make docs` builds with no warnings.
+- Every step from 1.9: its runnable result works through `cmd/cowbook`.
 - From M2: `make test-integration`.
 - From M3: exercise the running server with `curl`, with commands given in each step.
 - At the end: the 7.7 run-through in a browser, and a checklist mapping each README rule to the test that proves it.
@@ -37,8 +39,12 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [x] **1.6** Who can book, and staff bookings awaiting approval. `Book(ctx, actor, spaceID, p)`: a member books only for themselves, front desk for any member at their assigned locations, an admin for any member. A staff-made booking starts pending, with an approval deadline 24 hours after creation or at the booking's start, whichever comes first. `Booking.Approve(actor, now)` lets only that member approve, before the deadline and while not cancelled; the service gets `Approve`. Declining is the existing `Cancel`. *Go: state derived from zero-value timestamps, unexported helper methods.*
 - [x] **1.7** Deleting a member. `MemberService.Delete` marks the member deleted and cancels every booking of theirs that hasn't ended, pending ones included, through an unexported domain method that skips the actor rules (the system cancels, not a person). `Book`, `Cancel` and `Approve` refuse a deleted member acting as a member. One store method saves the deletion and the cancellations together, so Postgres can use one transaction. *Go: slices of values vs pointers, changing elements in a loop.*
 - [x] **1.8** In-memory store plus a concurrent booking test, also covering `Approve`, member deletion and a pending booking holding its slot. *Go: goroutines, `sync.Mutex`, `sync.WaitGroup`, `-race`.*
+- [x] **1.9** `cmd/cowbook`, the app's one binary, with its first subcommand `repl` over the in-memory store, with a settable clock, `space add`, `member add`, acting as a member or staff (`as`), `book`, `help`, and a script mode that echoes each piped line. Errors print and the session carries on. *Go: `os.Args` subcommands, `bufio.Scanner`, `io.Reader`/`io.Writer` injection, `strings.Fields`, `time.Parse`, a map of command functions.*
+- [ ] **1.10** REPL catches up: `cancel`, `approve`, `member delete`, listings of spaces, members and bookings with their state. *Go: `text/tabwriter`.*
 
 ### M2: Postgres
+
+Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for example two overlapping inserts, the second refused). From 2.4 `cowbook repl` takes `-store=postgres`, so data survives a restart.
 
 - [ ] **2.1** `compose.yaml`, goose, platform migration: `tenants` and the `shared` schema. *Go: `go tool` directive.*
 - [ ] **2.2** Tenant migration (locations, spaces, members) and a provisioning function that creates `tenant_<id>` and migrates it, with cleanup on failure. Must confirm goose works per schema (see [Database roles](#database-roles)). *Go: `embed`, `database/sql` vs pgx, `pgx.Identifier`.*
@@ -49,8 +55,10 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 ### M3: HTTP API
 
-- [ ] **3.1** `cmd/cowbook`, config from env, `slog`, `/healthz`, graceful shutdown. *Go: `signal.NotifyContext`, `http.Server`.*
-- [ ] **3.2** `cowbook migrate` and `cowbook create-tenant` subcommands for local use. *Go: `flag`, subcommands, exit codes.*
+Runnable: 3.1-3.2 add the `serve`, `migrate` and `create-tenant` subcommands, the server exercised with `curl`. From 3.3 `cowbook repl` takes `-server http://localhost:8080` and talks to the running server. Its commands go through a small `Backend` interface with an in-process and an HTTP implementation, and each new endpoint gets a REPL command. Whether in-process mode stays is decided at 3.3.
+
+- [ ] **3.1** `cowbook serve`: config from env, `slog`, `/healthz`, graceful shutdown. *Go: `signal.NotifyContext`, `http.Server`.*
+- [ ] **3.2** `cowbook migrate` and `cowbook create-tenant` subcommands for local use; dispatch moves from a `switch` on `os.Args` to `flag`. *Go: `flag`, `flag.NewFlagSet` per subcommand, exit codes.*
 - [ ] **3.3** chi, tenant middleware, `GET spaces`, JSON helpers. *Go: handlers, middleware as function wrapping, `httptest`.*
 - [ ] **3.4** Availability for a space and date.
 - [ ] **3.5** `POST bookings` with error-to-status mapping (409, 422). Uses a **temporary** `X-Member-ID` header, removed in 4.3, which builds a member `Actor`. Staff booking for a member waits for staff login.
@@ -58,6 +66,8 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [ ] **3.7** Management endpoints for locations, spaces and members. Deleting a member goes through `MemberService.Delete`, which cancels their bookings.
 
 ### M4: Login
+
+Runnable: `cowbook repl` gets `login`, which replaces `as` and holds the session cookie.
 
 - [ ] **4.1** Credentials migration and password hashing.
 - [ ] **4.2** Sessions: log in, log out, token hashing. *Go: `crypto/rand`, cookies.*
@@ -68,6 +78,8 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [ ] **4.7** Temporary password reset with forced change at next login.
 
 ### M5: Tenant isolation and fairness
+
+Runnable: REPL commands for operator signup and switching tenants. M6 adds support commands.
 
 - [ ] **5.1** Database roles: per-tenant roles, platform, provisioner, app locked down. `WithTenant` adds `SET LOCAL ROLE`, and provisioning creates the tenant role.
 - [ ] **5.2** Isolation suite: two tenants, every endpoint, plus direct SQL naming the other tenant's schema, which must be refused.
@@ -84,6 +96,8 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [ ] **6.5** Test proving the support role cannot read members or bookings at the database level.
 
 ### M7: Web pages
+
+Runnable: the browser, against `cowbook serve`. `cowbook repl` keeps up only where it's cheap.
 
 - [ ] **7.1** Layout, embedded templates, CSS, login page. *Go: `embed`, `html/template` escaping.*
 - [ ] **7.2** Member: availability and booking form.
@@ -178,7 +192,7 @@ Agent's calls, open to rejection:
 Layering: delivery (`httpapi`, `web`, `main`) -> `cowbook` services -> `cowbook` domain; `postgres` implements interfaces defined in `cowbook`. The domain imports no database or HTTP packages. The clock is injected.
 
 ```
-cmd/cowbook/main.go      composition root, CLI subcommands
+cmd/cowbook/main.go      the one binary and composition root: repl, serve, migrate, ...
 cowbook/                 domain + services
 internal/postgres/       store implementations, sqlc output
 internal/httpapi/        JSON API at /api/o/{slug}/...

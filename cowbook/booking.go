@@ -68,6 +68,10 @@ func (b Booking) Cancelled() bool { return !b.cancelledAt.IsZero() }
 // them. It is false for a booking that never needed approval.
 func (b Booking) Approved() bool { return !b.approvedAt.IsZero() }
 
+// ApprovalDeadline returns when a booking staff made must be approved by. It
+// is zero for a booking the member made themselves.
+func (b Booking) ApprovalDeadline() time.Time { return b.approvalDeadline }
+
 // BookingParams holds the values needed to create a Booking.
 type BookingParams struct {
 	MemberID  int64

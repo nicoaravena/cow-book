@@ -606,6 +606,9 @@ func TestBookingAccessors(t *testing.T) {
 	if !b.Start().Equal(p.Start) || !b.End().Equal(p.End) {
 		t.Errorf("Start(), End() = %v, %v, want %v, %v", b.Start(), b.End(), p.Start, p.End)
 	}
+	if b.ApprovalDeadline() != b.approvalDeadline || b.ApprovalDeadline().IsZero() {
+		t.Errorf("ApprovalDeadline() = %v, want %v", b.ApprovalDeadline(), b.approvalDeadline)
+	}
 
 	later := bookingNow.Add(time.Hour)
 	tests := []struct {

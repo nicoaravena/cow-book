@@ -5,7 +5,7 @@ All domain code and services live in one package, `cowbook`. Storage adapters li
 nor any database or HTTP package.
 
 ```
-delivery (M3+: httpapi, web, main)
+delivery     cmd/cowbook: repl (now), serve with httpapi + web (M3+)
         |
         v
 services     BookingService, MemberService          cowbook/service.go, memberservice.go
@@ -24,6 +24,8 @@ adapters     internal/memstore (now), internal/postgres (M2)
 | --- | --- |
 | `cowbook` | Domain types and rules, the services, the store interfaces, every sentinel error |
 | `internal/memstore` | In-memory store for tests and local runs. See [Stores](stores.md) |
+| `internal/repl` | The REPL's commands: parse words, call a service, print. See [REPL](repl.md) |
+| `cmd/cowbook` | The one binary and composition root: its subcommands wire stores, clock and services together. Today only `repl` |
 
 ## Types at a glance
 
