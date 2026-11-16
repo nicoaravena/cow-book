@@ -171,3 +171,13 @@ func TestMemberDeleted(t *testing.T) {
 		t.Error("Deleted() = false after Delete, want true")
 	}
 }
+
+func TestMemberAccessors(t *testing.T) {
+	m, err := NewMember(validMemberParams(), memberNow)
+	if err != nil {
+		t.Fatalf("NewMember() error = %v, want nil", err)
+	}
+	if m.Name() != m.name || m.Email() != m.email || m.Name() == "" || m.Email() == "" {
+		t.Errorf("Name(), Email() = %q, %q, want %q, %q", m.Name(), m.Email(), m.name, m.email)
+	}
+}

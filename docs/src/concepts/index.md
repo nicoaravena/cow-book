@@ -4,7 +4,7 @@ Each topic links to the steps where it shows up.
 
 | Topic | Steps |
 | --- | --- |
-| Accessor methods on unexported fields | [1.8](1.8-in-memory-store.md#values-copies-and-accessors) |
+| Accessor methods on unexported fields | [1.8](1.8-in-memory-store.md#values-copies-and-accessors), [1.10](1.10-repl-catches-up.md#more-accessors) |
 | Arrays vs slices | [1.2](1.2-opening-hours.md#arrays-slices-and-sorting) |
 | `bufio.Scanner`, reading lines | [1.9](1.9-repl.md#reading-lines-with-bufioscanner) |
 | Closing a channel to release many goroutines | [1.8](1.8-in-memory-store.md#goroutines) |
@@ -29,8 +29,10 @@ Each topic links to the steps where it shows up.
 | `internal/` packages | [1.8](1.8-in-memory-store.md#internal) |
 | `io.Reader` and `io.Writer` | [1.9](1.9-repl.md#ioreader-and-iowriter) |
 | `iota` enums with a safe zero value | [1.4](1.4-members-and-actors.md#small-enums-with-iota) |
+| Lining up columns (`text/tabwriter`, `Flush`) | [1.10](1.10-repl-catches-up.md#lining-up-columns-with-texttabwriter) |
 | Logic races vs data races | [1.8](1.8-in-memory-store.md#the-race-detector) |
 | Loop variables per iteration (Go 1.22) | [1.8](1.8-in-memory-store.md#goroutines) |
+| Map iteration order | [1.9](1.9-repl.md#a-map-of-command-functions), [1.10](1.10-repl-catches-up.md#map-order-and-slicessortfunc) |
 | Maps of functions, method values | [1.9](1.9-repl.md#a-map-of-command-functions) |
 | Methods and receivers | [1.2](1.2-opening-hours.md#methods), [1.4](1.4-members-and-actors.md#pointer-vs-value-receivers) |
 | Modules, packages, `go.mod` | [0.1](0.1-foundation.md#modules-and-packages) |
@@ -41,8 +43,9 @@ Each topic links to the steps where it shows up.
 | Sentinel errors | [1.1](1.1-space.md#sentinel-errors), [1.9](1.9-repl.md#errors-for-control-flow) |
 | Soft delete | [1.4](1.4-members-and-actors.md#soft-delete), [1.7](1.7-deleting-a-member.md) |
 | Splitting strings (`Fields`, `Cut`, `SplitSeq`) | [1.9](1.9-repl.md#splitting-words) |
-| State from zero-value timestamps | [1.3](1.3-booking-rules.md#cancelled-as-a-timestamp), [1.6](1.6-who-can-book.md#state-from-zero-value-timestamps) |
-| String enums (`type SpaceKind string`) | [1.1](1.1-space.md#string-enums) |
+| State from zero-value timestamps | [1.3](1.3-booking-rules.md#cancelled-as-a-timestamp), [1.6](1.6-who-can-book.md#state-from-zero-value-timestamps), [1.10](1.10-repl-catches-up.md#a-bookings-state-belongs-to-the-domain) |
+| String enums (`type SpaceKind string`) | [1.1](1.1-space.md#string-enums), [1.10](1.10-repl-catches-up.md#a-bookings-state-belongs-to-the-domain) |
+| Sorting with `slices.SortFunc` and `cmp.Compare` | [1.10](1.10-repl-catches-up.md#map-order-and-slicessortfunc) |
 | `switch` with no value, first broken rule wins | [1.1](1.1-space.md#constructors), [1.3](1.3-booking-rules.md#the-rules-as-one-switch) |
 | `sync.Mutex` and `defer Unlock` | [1.8](1.8-in-memory-store.md#syncmutex) |
 | `sync.WaitGroup` and `wg.Go` | [1.8](1.8-in-memory-store.md#goroutines) |

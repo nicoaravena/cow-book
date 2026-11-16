@@ -4,7 +4,9 @@
 package memstore
 
 import (
+	"cmp"
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -223,4 +225,56 @@ func (s *Store) SaveDeletion(ctx context.Context, m cowbook.Member, cancelled []
 		}
 	}
 	return nil
+}
+
+// The List methods return everything stored, sorted by ID, for the REPL to
+// show. They are not part of the cowbook store interfaces: no service needs
+// them yet. Map iteration order is random, so each sorts what it collects.
+
+// ListSpaces returns every space.
+func (s *Store) ListSpaces(ctx context.Context) ([]cowbook.Space, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	spaces := make([]cowbook.Space, 0, len(s.spaces))
+	for _, sp := range s.spaces {
+		spaces = append(spaces, sp.space)
+	}
+	slices.SortFunc(spaces, func(a, b cowbook.Space) int { return cmp.Compare(a.ID, b.ID) })
+	return spaces, nil
+}
+
+// ListMembers returns every member, deleted ones included.
+func (s *Store) ListMembers(ctx context.Context) ([]cowbook.Member, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	members := make([]cowbook.Member, 0, len(s.members))
+	for _, m := range s.members {
+		members = append(members, m)
+	}
+	slices.SortFunc(members, func(a, b cowbook.Member) int { return cmp.Compare(a.ID, b.ID) })
+	return members, nil
+}
+
+// ListBookings returns every booking, cancelled ones included.
+func (s *Store) ListBookings(ctx context.Context) ([]cowbook.Booking, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	bookings := make([]cowbook.Booking, 0, len(s.bookings))
+	for _, b := range s.bookings {
+		bookings = append(bookings, b)
+	}
+	slices.SortFunc(bookings, func(a, b cowbook.Booking) int { return cmp.Compare(a.ID, b.ID) })
+	return bookings, nil
 }

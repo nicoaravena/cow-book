@@ -46,7 +46,8 @@ func runREPL() error {
 	clock := repl.NewClock(time.Date(2026, time.November, 16, 8, 0, 0, 0, time.UTC))
 	store := memstore.New()
 	bookings := cowbook.NewBookingService(store, store, store, clock.Now)
-	session := repl.NewSession(store, bookings, clock)
+	members := cowbook.NewMemberService(store, store, clock.Now)
+	session := repl.NewSession(store, bookings, members, clock)
 
 	// Input from a terminal is a person typing; anything else, such as a
 	// file redirected with <, is a script.

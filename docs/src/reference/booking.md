@@ -10,18 +10,18 @@ There is no status field. The state comes from which timestamps are set (zero me
 | `approvalDeadline` | `approvedAt` | `cancelledAt` | State |
 | --- | --- | --- | --- |
 | zero | zero | zero | **Confirmed**: the member booked it |
-| set | zero | zero | **Pending** until the deadline, then **lapsed** |
+| set | zero | zero | **Pending** until the deadline, then **expired** |
 | set | set | zero | **Approved** |
 | any | any | set | **Cancelled** |
 
-Pending and lapsed bookings both hold their slot. A lapsed one is cancelled lazily when a new
+Pending and expired bookings both hold their slot. An expired one is cancelled lazily when a new
 booking needs the slot (2.5; the in-memory store doesn't do this).
 
 ```
               NewBooking by member           NewBooking by staff
                      |                              |
                      v                              v
-                 Confirmed                       Pending ---- deadline passes ---> Lapsed
+                 Confirmed                       Pending ---- deadline passes ---> Expired
                      |                          |       \
                      |                   Approve |        \ Cancel (= decline)
                      |                          v         \
@@ -29,6 +29,21 @@ booking needs the slot (2.5; the in-memory store doesn't do this).
                      |                          |           |
                      +------ Cancel ------------+-----------+--> Cancelled
 ```
+
+## `(Booking) State(now time.Time) BookingState`
+
+Names the state above at `now`, for showing to people (1.10). The rules read the timestamps, not
+this. `BookingState` is a `string` type:
+
+| Constant | Value | When |
+| --- | --- | --- |
+| `StateConfirmed` | `"confirmed"` | The member booked it, or approved it |
+| `StatePending` | `"pending"` | Made by staff, not approved, `now` before the deadline |
+| `StateExpired` | `"expired"` | Made by staff, not approved, `now` at or after the deadline |
+| `StateCancelled` | `"cancelled"` | Cancelled or declined, whatever else is set |
+
+An expired booking is the one `Approve` refuses with `ErrApprovalExpired`: both use
+`!now.Before(deadline)`.
 
 ## `NewBooking(actor, space, loc, p, now) (Booking, error)`
 
@@ -92,12 +107,13 @@ Read-only, for stores and the REPL outside the package:
 | --- | --- |
 | `SpaceID()` | The booked space's ID |
 | `MemberID()` | The member the booking is for |
+| `Attendees()` | How many people it is for (1.10) |
 | `Start()`, `End()` | The period; `End` is exclusive |
 | `Cancelled()` | Whether `cancelledAt` is set |
 | `Approved()` | Whether `approvedAt` is set. `false` for a booking that never needed approval |
 | `ApprovalDeadline()` | When a staff-made booking must be approved by; zero for a member's own booking (1.9) |
 
-Not exposed yet: `attendees`, `bookedBy`, the other timestamps, and a way to rebuild a booking
+Not exposed yet: `bookedBy`, the other timestamps, and a way to rebuild a booking
 from a database row (2.4).
 
 ## Known gaps

@@ -35,6 +35,17 @@ A `string` type. Values, as they will be stored and sent over the API:
 | `KindMeetingRoom` | `"meeting_room"` |
 | `KindPhoneBooth` | `"phone_booth"` |
 
+## Accessors
+
+Read-only, for the REPL and stores outside the package (1.10):
+
+| Method | Returns |
+| --- | --- |
+| `Name()` | The trimmed name |
+| `Kind()` | The `SpaceKind` |
+| `Capacity()` | Most attendees per booking |
+| `MaxBookingLength()` | Longest booking allowed |
+
 ## Fields
 
 | Field | Exported | Notes |
@@ -51,6 +62,7 @@ A `Space` doesn't know its timezone. Its location does, so `SpaceStore.GetSpace`
 
 ## Not yet
 
-- No accessors. `internal/postgres` will need them, and a way to rebuild a `Space` from a row (2.4).
+- No accessors for `locationID`, `hours`, `available` or the timestamps, and no way to rebuild a
+  `Space` from a row. `internal/postgres` will need both (2.4).
 - No create or update service. `memstore.AddSpace` seeds spaces in tests; space management arrives
   in 3.7.

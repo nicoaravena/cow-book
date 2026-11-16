@@ -606,6 +606,9 @@ func TestBookingAccessors(t *testing.T) {
 	if !b.Start().Equal(p.Start) || !b.End().Equal(p.End) {
 		t.Errorf("Start(), End() = %v, %v, want %v, %v", b.Start(), b.End(), p.Start, p.End)
 	}
+	if b.Attendees() != p.Attendees {
+		t.Errorf("Attendees() = %d, want %d", b.Attendees(), p.Attendees)
+	}
 	if b.ApprovalDeadline() != b.approvalDeadline || b.ApprovalDeadline().IsZero() {
 		t.Errorf("ApprovalDeadline() = %v, want %v", b.ApprovalDeadline(), b.approvalDeadline)
 	}
@@ -633,6 +636,43 @@ func TestBookingAccessors(t *testing.T) {
 			}
 			if b.Approved() != tt.wantApproved {
 				t.Errorf("Approved() = %v, want %v", b.Approved(), tt.wantApproved)
+			}
+		})
+	}
+}
+
+func TestBookingState(t *testing.T) {
+	deadline := bookingNow.Add(24 * time.Hour)
+	later := bookingNow.Add(time.Hour)
+	approve := func(b *Booking) error { return b.Approve(MemberActor(3), later) }
+	cancel := func(b *Booking) error { return b.Cancel(MemberActor(3), storedSpace(t), later) }
+
+	tests := []struct {
+		name    string
+		booking func(t *testing.T) Booking
+		change  func(b *Booking) error
+		now     time.Time
+		want    BookingState
+	}{
+		{"member's own booking", cancellableBooking, nil, later, StateConfirmed},
+		{"own booking, cancelled", cancellableBooking, cancel, later, StateCancelled},
+		{"staff booking before the deadline", pendingBooking, nil, deadline.Add(-time.Minute), StatePending},
+		{"staff booking at the deadline", pendingBooking, nil, deadline, StateExpired},
+		{"staff booking after the deadline", pendingBooking, nil, deadline.Add(time.Hour), StateExpired},
+		{"staff booking, approved", pendingBooking, approve, deadline.Add(time.Hour), StateConfirmed},
+		{"staff booking, declined", pendingBooking, cancel, deadline.Add(time.Hour), StateCancelled},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := tt.booking(t)
+			if tt.change != nil {
+				if err := tt.change(&b); err != nil {
+					t.Fatalf("change error = %v, want nil", err)
+				}
+			}
+			if got := b.State(tt.now); got != tt.want {
+				t.Errorf("State() = %q, want %q", got, tt.want)
 			}
 		})
 	}

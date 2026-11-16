@@ -20,10 +20,17 @@ const defaultHours = "mon-fri/08:00-20:00"
 // days are the day names hours use, in the order a range runs.
 var days = []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
-func (s *Session) space(_ context.Context, args []string) (string, error) {
-	if len(args) < 5 || len(args) > 7 || args[0] != "add" {
-		return "", errUsage
+func (s *Session) space(ctx context.Context, args []string) (string, error) {
+	switch {
+	case len(args) == 1 && args[0] == "list":
+		return s.spaceList(ctx)
+	case len(args) >= 5 && len(args) <= 7 && args[0] == "add":
+		return s.spaceAdd(args)
 	}
+	return "", errUsage
+}
+
+func (s *Session) spaceAdd(args []string) (string, error) {
 	capacity, err := strconv.Atoi(args[3])
 	if err != nil {
 		return "", fmt.Errorf("capacity %q is not a number", args[3])
@@ -68,6 +75,25 @@ func (s *Session) space(_ context.Context, args []string) (string, error) {
 	sp.ID = s.lastSpaceID
 	s.store.AddSpace(sp, loc)
 	return fmt.Sprintf("ok space #%d", sp.ID), nil
+}
+
+func (s *Session) spaceList(ctx context.Context) (string, error) {
+	spaces, err := s.store.ListSpaces(ctx)
+	if err != nil || len(spaces) == 0 {
+		return "no spaces", err
+	}
+	var rows [][]string
+	for _, sp := range spaces {
+		_, loc, err := s.store.GetSpace(ctx, sp.ID)
+		if err != nil {
+			return "", err
+		}
+		rows = append(rows, []string{
+			strconv.FormatInt(sp.ID, 10), sp.Name(), string(sp.Kind()),
+			strconv.Itoa(sp.Capacity()), sp.MaxBookingLength().String(), loc.String(),
+		})
+	}
+	return table([]string{"ID", "NAME", "KIND", "CAPACITY", "MAX-LENGTH", "TIMEZONE"}, rows), nil
 }
 
 // parseWindows reads opening hours like mon-fri/09:00-18:00,sat/10:00-14:00.

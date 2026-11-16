@@ -13,6 +13,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"text/tabwriter"
 
 	"nicoaravena/cow-book-app/cowbook"
 	"nicoaravena/cow-book-app/internal/memstore"
@@ -37,11 +38,12 @@ type command struct {
 	run   func(ctx context.Context, args []string) (string, error)
 }
 
-// Session is one REPL run: the store, the service, the clock and who is
+// Session is one REPL run: the store, the services, the clock and who is
 // acting. One goroutine uses it, so nothing in it is locked.
 type Session struct {
 	store    *memstore.Store
 	bookings *cowbook.BookingService
+	members  *cowbook.MemberService
 	clock    *Clock
 
 	actor    cowbook.Actor
@@ -54,19 +56,22 @@ type Session struct {
 	commands map[string]command
 }
 
-// NewSession returns a Session over store and bookings. clock must be the
-// clock bookings was built with, so clock commands move the service's time.
-func NewSession(store *memstore.Store, bookings *cowbook.BookingService, clock *Clock) *Session {
-	s := &Session{store: store, bookings: bookings, clock: clock}
+// NewSession returns a Session over store and the services. clock must be
+// the clock the services were built with, so clock commands move their time.
+func NewSession(store *memstore.Store, bookings *cowbook.BookingService, members *cowbook.MemberService, clock *Clock) *Session {
+	s := &Session{store: store, bookings: bookings, members: members, clock: clock}
 	// s.as and the others are method values: functions with s already bound.
 	s.commands = map[string]command{
-		"as":     {"as member <id> | as frontdesk <id> <loc,loc...> | as admin <id>", "act as a member or staff", s.as},
-		"book":   {"book <spaceID> <YYYY-MM-DD> <HH:MM-HH:MM> [attendees] [for <memberID>]", "book a space, in the space's timezone", s.book},
-		"clock":  {"clock [set <YYYY-MM-DD> <HH:MM> | add <duration>]", "show or move the session's time (UTC)", s.clockCmd},
-		"help":   {"help", "list the commands", s.help},
-		"member": {"member add <name> <email>", "add a member", s.member},
-		"quit":   {"quit", "end the session (end of input does too)", s.quit},
-		"space":  {"space add <name> <kind> <capacity> <max-length> [hours] [timezone]", "add a space at location 1; hours like mon-fri/09:00-18:00,sat/10:00-14:00", s.space},
+		"approve": {"approve <bookingID>", "approve a booking staff made for you", s.approve},
+		"as":      {"as member <id> | as frontdesk <id> <loc,loc...> | as admin <id>", "act as a member or staff", s.as},
+		"book":    {"book <spaceID> <YYYY-MM-DD> <HH:MM-HH:MM> [attendees] [for <memberID>]", "book a space, in the space's timezone", s.book},
+		"booking": {"booking list", "list bookings with their state", s.booking},
+		"cancel":  {"cancel <bookingID>", "cancel a booking, or decline one staff made for you", s.cancel},
+		"clock":   {"clock [set <YYYY-MM-DD> <HH:MM> | add <duration>]", "show or move the session's time (UTC)", s.clockCmd},
+		"help":    {"help", "list the commands", s.help},
+		"member":  {"member add <name> <email> | member delete <id> | member list", "add, delete or list members; delete cancels their bookings", s.member},
+		"quit":    {"quit", "end the session (end of input does too)", s.quit},
+		"space":   {"space add <name> <kind> <capacity> <max-length> [hours] [timezone] | space list", "add a space at location 1, or list spaces; hours like mon-fri/09:00-18:00,sat/10:00-14:00", s.space},
 	}
 	return s
 }
@@ -125,6 +130,30 @@ func (s *Session) prompt() string {
 		return "nobody"
 	}
 	return s.who
+}
+
+// requireActor returns an error unless someone is acting, for commands that
+// need an actor.
+func (s *Session) requireActor() error {
+	if s.who == "" {
+		return errors.New("no one is acting: use as first")
+	}
+	return nil
+}
+
+// table lines up header and rows in columns two spaces apart. A tabwriter
+// buffers cells until Flush, because a column's width depends on its widest
+// cell, which may come in the last row.
+func table(header []string, rows [][]string) string {
+	var b strings.Builder
+	w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, strings.Join(header, "\t"))
+	for _, row := range rows {
+		fmt.Fprintln(w, strings.Join(row, "\t"))
+	}
+	w.Flush()
+	// Run ends each answer's line itself.
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 func (s *Session) help(_ context.Context, _ []string) (string, error) {

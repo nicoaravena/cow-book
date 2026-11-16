@@ -52,6 +52,21 @@ type Space struct {
 	updatedAt        time.Time
 }
 
+// The accessors below let code outside this package read a space without
+// being able to change it.
+
+// Name returns the space's name.
+func (s Space) Name() string { return s.name }
+
+// Kind returns what type of space it is.
+func (s Space) Kind() SpaceKind { return s.kind }
+
+// Capacity returns how many people the space holds.
+func (s Space) Capacity() int { return s.capacity }
+
+// MaxBookingLength returns the longest booking the space takes.
+func (s Space) MaxBookingLength() time.Duration { return s.maxBookingLength }
+
 // SpaceParams holds the values needed to create a Space.
 type SpaceParams struct {
 	LocationID       int64

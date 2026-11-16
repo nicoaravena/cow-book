@@ -30,6 +30,8 @@ This only changes the member. Cancelling their bookings is `MemberService.Delete
 
 | Method | Returns |
 | --- | --- |
+| `Name()` | The trimmed name (1.10) |
+| `Email()` | The lowercased email (1.10) |
 | `Deleted()` | Whether `deletedAt` is set |
 
 ## Effects of deletion

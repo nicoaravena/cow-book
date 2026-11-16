@@ -16,6 +16,7 @@
 - [1.7 Deleting a member](concepts/1.7-deleting-a-member.md)
 - [1.8 In-memory store](concepts/1.8-in-memory-store.md)
 - [1.9 REPL](concepts/1.9-repl.md)
+- [1.10 REPL catches up](concepts/1.10-repl-catches-up.md)
 
 # Reference
 

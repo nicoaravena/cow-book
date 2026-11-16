@@ -25,6 +25,12 @@ type Member struct {
 	deletedAt time.Time // zero until deleted
 }
 
+// Name returns the member's name.
+func (m Member) Name() string { return m.name }
+
+// Email returns the member's email, lowercased.
+func (m Member) Email() string { return m.email }
+
 // Deleted reports whether the member has been deleted.
 func (m Member) Deleted() bool { return !m.deletedAt.IsZero() }
 

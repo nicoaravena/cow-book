@@ -132,3 +132,16 @@ func TestNewSpaceValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestSpaceAccessors(t *testing.T) {
+	s, err := NewSpace(validSpaceParams(), time.Date(2026, time.November, 2, 9, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("NewSpace() error = %v, want nil", err)
+	}
+	if s.Name() != "Blue Room" || s.Kind() != KindMeetingRoom {
+		t.Errorf("Name(), Kind() = %q, %q, want %q, %q", s.Name(), s.Kind(), "Blue Room", KindMeetingRoom)
+	}
+	if s.Capacity() != 8 || s.MaxBookingLength() != 4*time.Hour {
+		t.Errorf("Capacity(), MaxBookingLength() = %d, %v, want 8, 4h", s.Capacity(), s.MaxBookingLength())
+	}
+}

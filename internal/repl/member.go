@@ -10,11 +10,20 @@ import (
 	"nicoaravena/cow-book-app/cowbook"
 )
 
-func (s *Session) member(_ context.Context, args []string) (string, error) {
-	if len(args) != 3 || args[0] != "add" {
-		return "", errUsage
+func (s *Session) member(ctx context.Context, args []string) (string, error) {
+	switch {
+	case len(args) == 3 && args[0] == "add":
+		return s.memberAdd(args[1], args[2])
+	case len(args) == 2 && args[0] == "delete":
+		return s.memberDelete(ctx, args[1])
+	case len(args) == 1 && args[0] == "list":
+		return s.memberList(ctx)
 	}
-	m, err := cowbook.NewMember(cowbook.MemberParams{Name: args[1], Email: args[2]}, s.clock.Now())
+	return "", errUsage
+}
+
+func (s *Session) memberAdd(name, email string) (string, error) {
+	m, err := cowbook.NewMember(cowbook.MemberParams{Name: name, Email: email}, s.clock.Now())
 	if err != nil {
 		return "", err
 	}
@@ -22,6 +31,36 @@ func (s *Session) member(_ context.Context, args []string) (string, error) {
 	m.ID = s.lastMemberID
 	s.store.AddMember(m)
 	return fmt.Sprintf("ok member #%d", m.ID), nil
+}
+
+// memberDelete deletes the member, which cancels their bookings that haven't
+// ended. Anyone may, as the service doesn't check who deletes yet.
+func (s *Session) memberDelete(ctx context.Context, arg string) (string, error) {
+	id, err := strconv.ParseInt(arg, 10, 64)
+	if err != nil {
+		return "", errUsage
+	}
+	m, err := s.members.Delete(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("ok member #%d deleted", m.ID), nil
+}
+
+func (s *Session) memberList(ctx context.Context) (string, error) {
+	members, err := s.store.ListMembers(ctx)
+	if err != nil || len(members) == 0 {
+		return "no members", err
+	}
+	var rows [][]string
+	for _, m := range members {
+		state := "active"
+		if m.Deleted() {
+			state = "deleted"
+		}
+		rows = append(rows, []string{strconv.FormatInt(m.ID, 10), m.Name(), m.Email(), state})
+	}
+	return table([]string{"ID", "NAME", "EMAIL", "STATE"}, rows), nil
 }
 
 // as sets who the next commands act as. It checks only the words: whether

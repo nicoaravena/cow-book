@@ -44,6 +44,9 @@ happen as one step.
 - `memstore.New()` returns an empty store.
 - `AddSpace(space, loc)` and `AddMember(m)` seed it. The caller sets the ID, since spaces and
   members have no create service yet.
+- `ListSpaces(ctx)`, `ListMembers(ctx)`, `ListBookings(ctx)` return everything stored, sorted by
+  ID, cancelled bookings and deleted members included. They are for the REPL and are not part of
+  the interfaces above: no service needs them yet (1.10).
 - Every method returns `ctx.Err()` without doing anything if the context is already done.
 
 Differences from the Postgres store planned for M2:
@@ -62,5 +65,6 @@ decides no races.
 ## Reading a booking or member from outside `cowbook`
 
 Fields are unexported, so stores read them through accessors: `Booking.SpaceID`, `MemberID`,
-`Start`, `End`, `Cancelled`, `Approved`, and `Member.Deleted`. Rebuilding a `Booking` from a
+`Start`, `End`, `Cancelled`, `Approved`, and `Member.Deleted`. 1.10 adds `Booking.Attendees`,
+`Booking.State`, `Member.Name`, `Email` and `Space.Name`, `Kind`, `Capacity`, `MaxBookingLength`. Rebuilding a `Booking` from a
 database row still needs a constructor, due in 2.4.

@@ -30,11 +30,17 @@ The prompt shows who is acting: `[nobody]>`, `[member 1]>`, `[frontdesk 7 1,2]>`
 | `clock set <YYYY-MM-DD> <HH:MM>` | Sets the time, in UTC |
 | `clock add <duration>` | Moves the time on, e.g. `90m`, `2h30m`, `25h` |
 | `space add <name> <kind> <capacity> <max-length> [hours] [timezone]` | Adds a space at location 1 |
+| `space list` | Lists spaces with kind, capacity, max length and timezone |
 | `member add <name> <email>` | Adds a member |
+| `member delete <id>` | Deletes a member and cancels their bookings that haven't ended |
+| `member list` | Lists members, `active` or `deleted` |
 | `as member <id>` | Acts as that member |
 | `as frontdesk <id> <loc,loc...>` | Acts as front desk staff assigned to those locations |
 | `as admin <id>` | Acts as an admin |
 | `book <spaceID> <YYYY-MM-DD> <HH:MM-HH:MM> [attendees] [for <memberID>]` | Books a space |
+| `cancel <bookingID>` | Cancels a booking, or declines one staff made for you |
+| `approve <bookingID>` | Approves a booking staff made for you |
+| `booking list` | Lists bookings with their state at the session's time |
 | `help` | Lists the commands |
 | `quit` | Ends the session |
 
@@ -56,8 +62,26 @@ The prompt shows who is acting: `[nobody]>`, `[member 1]>`, `[frontdesk 7 1,2]>`
 - A member books for themselves; `for` is optional. Staff must name the member with `for`, and the
   booking is pending until that member approves, by the deadline shown.
 
+### `cancel`, `approve`, `member delete`
+
+- `cancel` and `approve` need someone acting (`as`). The rules are the domain's: a member cancels
+  their own bookings, staff those of members they act for; only the member approves, before the
+  deadline.
+- `member delete` needs no actor yet, since the service doesn't check who deletes (M4).
+
+### Lists
+
+Columns line up with `text/tabwriter`. Rows are sorted by ID. An empty list prints `no spaces`,
+`no members` or `no bookings`.
+
+- `booking list` shows each booking's time on the wall clock at its space, like `book`, and its
+  state: `confirmed`, `pending`, `expired` (deadline passed unapproved; still holds its slot) or
+  `cancelled`. See [Booking](booking.md#booking-statenow-timetime-bookingstate).
+- `member list` includes deleted members.
+
 ## Changes by step
 
 | Step | Change |
 | --- | --- |
 | [1.9](../concepts/1.9-repl.md) | First version: `clock`, `space add`, `member add`, `as`, `book`, `help`, `quit` |
+| [1.10](../concepts/1.10-repl-catches-up.md) | `cancel`, `approve`, `member delete`, `space list`, `member list`, `booking list` |

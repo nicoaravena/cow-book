@@ -20,7 +20,8 @@ func run(t *testing.T, script ...string) string {
 	clock := repl.NewClock(start)
 	store := memstore.New()
 	bookings := cowbook.NewBookingService(store, store, store, clock.Now)
-	s := repl.NewSession(store, bookings, clock)
+	members := cowbook.NewMemberService(store, store, clock.Now)
+	s := repl.NewSession(store, bookings, members, clock)
 
 	var out strings.Builder
 	in := strings.NewReader(strings.Join(script, "\n") + "\n")
@@ -207,6 +208,136 @@ func TestMemberAdd(t *testing.T) {
 	}
 }
 
+func TestListings(t *testing.T) {
+	got := run(t, append(setup,
+		"space add Desk-1 hot_desk 1 4h mon-fri/09:00-13:00 Europe/Madrid",
+		"member add Bo bo@example.com",
+		"member add Cy cy@example.com",
+		"# staff book for Bo, who approves; Ana books and cancels; Cy is deleted",
+		"as admin 9",
+		"book 1 2026-11-16 11:00-12:00 3 for 2",
+		"book 2 2026-11-17 09:00-10:00 for 3",
+		"as member 2",
+		"approve 1",
+		"as member 1",
+		"book 1 2026-11-16 09:00-10:00",
+		"cancel 3",
+		"book 2 2026-11-16 12:00-13:00",
+		"member delete 3",
+		"booking list",
+		"member list",
+		"space list",
+	)...)
+
+	want := `[nobody]> space add Room-A meeting_room 6 2h
+ok space #1
+[nobody]> member add Ana ana@example.com
+ok member #1
+[nobody]> space add Desk-1 hot_desk 1 4h mon-fri/09:00-13:00 Europe/Madrid
+ok space #2
+[nobody]> member add Bo bo@example.com
+ok member #2
+[nobody]> member add Cy cy@example.com
+ok member #3
+# staff book for Bo, who approves; Ana books and cancels; Cy is deleted
+[nobody]> as admin 9
+ok acting as admin 9
+[admin 9]> book 1 2026-11-16 11:00-12:00 3 for 2
+ok booking #1: space 1, Mon 2026-11-16 11:00-12:00 UTC, pending: member 2 must approve by Mon 2026-11-16 11:00 UTC
+[admin 9]> book 2 2026-11-17 09:00-10:00 for 3
+ok booking #2: space 2, Tue 2026-11-17 09:00-10:00 CET, pending: member 3 must approve by Tue 2026-11-17 09:00 CET
+[admin 9]> as member 2
+ok acting as member 2
+[member 2]> approve 1
+ok booking #1 approved
+[member 2]> as member 1
+ok acting as member 1
+[member 1]> book 1 2026-11-16 09:00-10:00
+ok booking #3: space 1, Mon 2026-11-16 09:00-10:00 UTC
+[member 1]> cancel 3
+ok booking #3 cancelled
+[member 1]> book 2 2026-11-16 12:00-13:00
+ok booking #4: space 2, Mon 2026-11-16 12:00-13:00 CET
+[member 1]> member delete 3
+ok member #3 deleted
+[member 1]> booking list
+ID  SPACE  MEMBER  WHEN                            ATTENDEES  STATE
+1   1      2       Mon 2026-11-16 11:00-12:00 UTC  3          confirmed
+2   2      3       Tue 2026-11-17 09:00-10:00 CET  1          cancelled
+3   1      1       Mon 2026-11-16 09:00-10:00 UTC  1          cancelled
+4   2      1       Mon 2026-11-16 12:00-13:00 CET  1          confirmed
+[member 1]> member list
+ID  NAME  EMAIL            STATE
+1   Ana   ana@example.com  active
+2   Bo    bo@example.com   active
+3   Cy    cy@example.com   deleted
+[member 1]> space list
+ID  NAME    KIND          CAPACITY  MAX-LENGTH  TIMEZONE
+1   Room-A  meeting_room  6         2h0m0s      UTC
+2   Desk-1  hot_desk      1         4h0m0s      Europe/Madrid
+`
+	if got != want {
+		t.Errorf("output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestEmptyListings(t *testing.T) {
+	out := run(t, "space list", "member list", "booking list")
+	for _, w := range []string{"no spaces", "no members", "no bookings"} {
+		if !strings.Contains(out, "\n"+w+"\n") {
+			t.Errorf("output lacks %q:\n%s", w, out)
+		}
+	}
+}
+
+// Each case starts with a booking admin 9 made for member 1 of space 1 at
+// 11:00, pending until 11:00, and member 2 added.
+func TestCancelApproveDelete(t *testing.T) {
+	staffBooking := append(setup, "member add Bo bo@example.com", "as admin 9", "book 1 2026-11-16 11:00-12:00 for 1")
+	tests := []struct {
+		name  string
+		lines []string
+		want  string
+	}{
+		{"pending shows in the list", []string{"booking list"}, "1   1      1       Mon 2026-11-16 11:00-12:00 UTC  1          pending"},
+		{"expired after the deadline", []string{"clock add 3h", "booking list"}, "1   1      1       Mon 2026-11-16 11:00-12:00 UTC  1          expired"},
+		{"approve after the deadline", []string{"clock add 3h", "as member 1", "approve 1"}, "error: booking's approval deadline has passed"},
+		{"approve by another member", []string{"as member 2", "approve 1"}, "error: only the member the booking is for can approve it"},
+		{"approve by staff", []string{"approve 1"}, "error: only the member the booking is for can approve it"},
+		{"approve twice", []string{"as member 1", "approve 1", "approve 1"}, "error: booking is not awaiting approval"},
+		{"decline is cancel", []string{"as member 1", "cancel 1"}, "ok booking #1 cancelled"},
+		{"cancel by another member", []string{"as member 2", "cancel 1"}, "error: only the booker or the operator's staff can cancel this booking"},
+		{"cancel twice", []string{"cancel 1", "cancel 1"}, "error: booking is already cancelled"},
+		{"no such booking", []string{"cancel 9"}, "error: booking not found"},
+		{"deleting cancels the booking", []string{"member delete 1", "booking list"}, "1   1      1       Mon 2026-11-16 11:00-12:00 UTC  1          cancelled"},
+		{"deleted member can't approve", []string{"member delete 1", "as member 1", "approve 1"}, "error: member is deleted"},
+		{"deleted member can't be booked for", []string{"member delete 1", "book 1 2026-11-16 14:00-15:00 for 1"}, "error: member is deleted"},
+		{"delete twice", []string{"member delete 1", "member delete 1"}, "error: member is deleted"},
+		{"delete unknown member", []string{"member delete 9"}, "error: member not found"},
+		{"cancel without an ID", []string{"cancel"}, "error: usage: cancel <bookingID>"},
+		{"approve with a bad ID", []string{"approve one"}, "error: usage: approve <bookingID>"},
+		{"bad member delete", []string{"member delete"}, "error: usage: member add <name> <email> | member delete <id> | member list"},
+		{"bad booking command", []string{"booking show"}, "error: usage: booking list"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := run(t, append(staffBooking, tt.lines...)...)
+			if got := lastLine(out); got != tt.want {
+				t.Errorf("last line = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("nobody can't cancel or approve", func(t *testing.T) {
+		for _, line := range []string{"cancel 1", "approve 1"} {
+			if got := lastLine(run(t, line)); got != "error: no one is acting: use as first" {
+				t.Errorf("%s: last line = %q", line, got)
+			}
+		}
+	})
+}
+
 func TestSessionControl(t *testing.T) {
 	t.Run("unknown command", func(t *testing.T) {
 		if got := lastLine(run(t, "fly")); got != `error: unknown command "fly", try help` {
@@ -215,7 +346,7 @@ func TestSessionControl(t *testing.T) {
 	})
 	t.Run("help lists every command", func(t *testing.T) {
 		out := run(t, "help")
-		for _, cmd := range []string{"as ", "book ", "clock", "help", "member add", "quit", "space add"} {
+		for _, cmd := range []string{"approve ", "as ", "book ", "booking list", "cancel ", "clock", "help", "member add", "quit", "space add"} {
 			if !strings.Contains(out, "\n  "+cmd) {
 				t.Errorf("help lacks %q:\n%s", cmd, out)
 			}
@@ -234,7 +365,7 @@ func TestSessionControl(t *testing.T) {
 	t.Run("interactive mode prints prompts but no echo", func(t *testing.T) {
 		clock := repl.NewClock(start)
 		store := memstore.New()
-		s := repl.NewSession(store, cowbook.NewBookingService(store, store, store, clock.Now), clock)
+		s := repl.NewSession(store, cowbook.NewBookingService(store, store, store, clock.Now), cowbook.NewMemberService(store, store, clock.Now), clock)
 		var out strings.Builder
 		if err := s.Run(context.Background(), strings.NewReader("clock\n"), &out, false); err != nil {
 			t.Fatalf("Run() error = %v", err)

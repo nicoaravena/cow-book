@@ -350,6 +350,43 @@ func TestSaveDeletion(t *testing.T) {
 	}
 }
 
+// The lists hold everything stored, cancelled bookings and deleted members
+// included, sorted by ID whatever order the map gives.
+func TestLists(t *testing.T) {
+	store := newStore(t, 3)
+	ctx := context.Background()
+	for _, hour := range []int{14, 10, 12} {
+		create(t, store, newBooking(t, cowbook.MemberActor(1), 8, 1, hour, hour+1))
+	}
+	cancelled, _ := store.GetBooking(ctx, 2)
+	if err := cancelled.Cancel(cowbook.MemberActor(1), newSpace(t, 8), now); err != nil {
+		t.Fatalf("Cancel() error = %v, want nil", err)
+	}
+	if err := store.SaveCancellation(ctx, cancelled); err != nil {
+		t.Fatalf("SaveCancellation() error = %v, want nil", err)
+	}
+	deleted, _ := store.GetMember(ctx, 2)
+	if err := deleted.Delete(now); err != nil {
+		t.Fatalf("Delete() error = %v, want nil", err)
+	}
+	if err := store.SaveDeletion(ctx, deleted, nil); err != nil {
+		t.Fatalf("SaveDeletion() error = %v, want nil", err)
+	}
+
+	spaces, err := store.ListSpaces(ctx)
+	if err != nil || len(spaces) != 2 || spaces[0].ID != 7 || spaces[1].ID != 8 {
+		t.Errorf("ListSpaces() = %+v, %v, want spaces 7, 8", spaces, err)
+	}
+	members, err := store.ListMembers(ctx)
+	if err != nil || len(members) != 3 || members[0].ID != 1 || members[2].ID != 3 || !members[1].Deleted() {
+		t.Errorf("ListMembers() = %+v, %v, want members 1-3 with 2 deleted", members, err)
+	}
+	bookings, err := store.ListBookings(ctx)
+	if err != nil || len(bookings) != 3 || bookings[0].ID != 1 || bookings[2].ID != 3 || !bookings[1].Cancelled() {
+		t.Errorf("ListBookings() = %+v, %v, want bookings 1-3 with 2 cancelled", bookings, err)
+	}
+}
+
 func TestDoneContextIsRefused(t *testing.T) {
 	store := newStore(t, 1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -369,6 +406,9 @@ func TestDoneContextIsRefused(t *testing.T) {
 		{"GetSpace", func() error { _, _, err := store.GetSpace(ctx, 7); return err }},
 		{"GetMember", func() error { _, err := store.GetMember(ctx, 1); return err }},
 		{"SaveDeletion", func() error { return store.SaveDeletion(ctx, m, nil) }},
+		{"ListSpaces", func() error { _, err := store.ListSpaces(ctx); return err }},
+		{"ListMembers", func() error { _, err := store.ListMembers(ctx); return err }},
+		{"ListBookings", func() error { _, err := store.ListBookings(ctx); return err }},
 	}
 
 	for _, tt := range tests {

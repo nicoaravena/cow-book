@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally with `cowbook serve`.
 
-**Next up:** step 1.10.
+**Next up:** step 2.1.
 
 ## How to work
 
@@ -40,7 +40,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 - [x] **1.7** Deleting a member. `MemberService.Delete` marks the member deleted and cancels every booking of theirs that hasn't ended, pending ones included, through an unexported domain method that skips the actor rules (the system cancels, not a person). `Book`, `Cancel` and `Approve` refuse a deleted member acting as a member. One store method saves the deletion and the cancellations together, so Postgres can use one transaction. *Go: slices of values vs pointers, changing elements in a loop.*
 - [x] **1.8** In-memory store plus a concurrent booking test, also covering `Approve`, member deletion and a pending booking holding its slot. *Go: goroutines, `sync.Mutex`, `sync.WaitGroup`, `-race`.*
 - [x] **1.9** `cmd/cowbook`, the app's one binary, with its first subcommand `repl` over the in-memory store, with a settable clock, `space add`, `member add`, acting as a member or staff (`as`), `book`, `help`, and a script mode that echoes each piped line. Errors print and the session carries on. *Go: `os.Args` subcommands, `bufio.Scanner`, `io.Reader`/`io.Writer` injection, `strings.Fields`, `time.Parse`, a map of command functions.*
-- [ ] **1.10** REPL catches up: `cancel`, `approve`, `member delete`, listings of spaces, members and bookings with their state. *Go: `text/tabwriter`.*
+- [x] **1.10** REPL catches up: `cancel`, `approve`, `member delete`, listings of spaces, members and bookings with their state. *Go: `text/tabwriter`.*
 
 ### M2: Postgres
 

@@ -54,6 +54,9 @@ func (b Booking) SpaceID() int64 { return b.spaceID }
 // MemberID returns the ID of the member the booking is for.
 func (b Booking) MemberID() int64 { return b.memberID }
 
+// Attendees returns how many people the booking is for.
+func (b Booking) Attendees() int { return b.attendees }
+
 // Start returns when the booking starts.
 func (b Booking) Start() time.Time { return b.start }
 
@@ -71,6 +74,37 @@ func (b Booking) Approved() bool { return !b.approvedAt.IsZero() }
 // ApprovalDeadline returns when a booking staff made must be approved by. It
 // is zero for a booking the member made themselves.
 func (b Booking) ApprovalDeadline() time.Time { return b.approvalDeadline }
+
+// BookingState is where a booking stands, for showing to people. The rules
+// read the timestamps, not this.
+type BookingState string
+
+const (
+	// StateConfirmed: the member made it, or approved it when staff did.
+	StateConfirmed BookingState = "confirmed"
+	// StatePending: staff made it and the member can still approve it.
+	StatePending BookingState = "pending"
+	// StateExpired: staff made it and the deadline passed unapproved. It
+	// still holds its slot until a store expires it.
+	StateExpired BookingState = "expired"
+	// StateCancelled: cancelled or declined; its slot is free.
+	StateCancelled BookingState = "cancelled"
+)
+
+// State returns where the booking stands at now, from its timestamps. A
+// pending booking expires at its deadline, the same moment Approve starts
+// refusing it.
+func (b Booking) State(now time.Time) BookingState {
+	switch {
+	case !b.cancelledAt.IsZero():
+		return StateCancelled
+	case b.awaitingApproval() && !now.Before(b.approvalDeadline):
+		return StateExpired
+	case b.awaitingApproval():
+		return StatePending
+	}
+	return StateConfirmed
+}
 
 // BookingParams holds the values needed to create a Booking.
 type BookingParams struct {
