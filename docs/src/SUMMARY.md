@@ -17,6 +17,7 @@
 - [1.8 In-memory store](concepts/1.8-in-memory-store.md)
 - [1.9 REPL](concepts/1.9-repl.md)
 - [1.10 REPL catches up](concepts/1.10-repl-catches-up.md)
+- [2.1 Postgres and migrations](concepts/2.1-postgres-and-migrations.md)
 
 # Reference
 
@@ -30,3 +31,4 @@
 - [Stores](reference/stores.md)
 - [Errors](reference/errors.md)
 - [REPL](reference/repl.md)
+- [Database](reference/database.md)

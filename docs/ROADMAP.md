@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally with `cowbook serve`.
 
-**Next up:** step 2.1.
+**Next up:** step 2.2.
 
 ## How to work
 
@@ -19,7 +19,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 - Every step: `make test` and `make lint` (`go vet`, `gofmt -l`, `staticcheck`), and `make docs` builds with no warnings.
 - Every step from 1.9: its runnable result works through `cmd/cowbook`.
-- From M2: `make test-integration`.
+- From M2: `make migrate-check`, and `make test-integration` from 2.2, where the first integration test arrives.
 - From M3: exercise the running server with `curl`, with commands given in each step.
 - At the end: the 7.7 run-through in a browser, and a checklist mapping each README rule to the test that proves it.
 
@@ -46,7 +46,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for example two overlapping inserts, the second refused). From 2.4 `cowbook repl` takes `-store=postgres`, so data survives a restart.
 
-- [ ] **2.1** `compose.yaml`, goose, platform migration: `tenants` and the `shared` schema. *Go: `go tool` directive.*
+- [x] **2.1** `compose.yaml`, goose, platform migration: `tenants` and the `shared` schema. *Go: `go tool` directive.*
 - [ ] **2.2** Tenant migration (locations, spaces, members) and a provisioning function that creates `tenant_<id>` and migrates it, with cleanup on failure. Must confirm goose works per schema (see [Database roles](#database-roles)). *Go: `embed`, `database/sql` vs pgx, `pgx.Identifier`.*
 - [ ] **2.3** Bookings tenant migration with the exclusion constraint, shown working with raw SQL. Also stores who made the booking, the approval deadline and the approval time. The constraint ignores only cancelled rows, so pending bookings hold their slot.
 - [ ] **2.4** sqlc setup, pgx pool, `WithTenant` transaction wrapper, space store. A test proves `search_path` doesn't carry over on a reused connection. *Go: closures for transaction scope, generated code, build tags.*
@@ -250,7 +250,7 @@ Added at the step that first needs them, for approval then:
 
 `go-chi/chi/v5`, `jackc/pgx/v5`, `x/crypto`, `x/time`, and as `go tool` entries `sqlc` and `goose`. Image: `postgres:18`.
 
-Already added: `staticcheck`, as a `go tool` entry.
+Already added: `staticcheck` and goose (v3.29.0), as `go tool` entries; image `postgres:18`.
 
 ## Risks and trade-offs
 
@@ -260,6 +260,8 @@ Already added: `staticcheck`, as a `go tool` entry.
 - **Signup runs DDL:** a public request ends up creating schemas and roles, so signup needs its own strict rate limit and a separate, more privileged pool.
 - **Reused connections:** a mistake here could expose the wrong tenant, so settings are transaction-local and tested in 2.4. pgx's prepared statement cache can raise errors while schemas are on different versions; 2.4 checks this and picks a pgx query mode.
 - **Shared instance:** one operator's heavy use can still affect others beyond what rate limits catch, because schemas don't separate CPU or disk. Dedicated databases remain a documented future option.
+- **goose's driver list in `go.mod`:** the goose command imports drivers for many databases, so `go.mod` and `go.sum` carry dozens of indirect entries that `cowbook` never builds. `cowbook migrate` (3.2) uses goose as a library with pgx only; the tool entry could then go.
+- **Superuser until 5.1:** the compose database's `cowbook` user owns everything and every command connects as it.
 - **In-memory rate limiter:** works for one process only; multiple instances would need a shared store. Acceptable since this runs locally.
 - **Limited support view:** with no member or booking totals, support can't tell how busy an operator is, and the platform can't estimate cost per operator from this view. That part of the README stays open.
 - **Public registration:** anyone can create a member account on an operator's page, with no email check. The per-IP limit slows abuse but doesn't verify identity.

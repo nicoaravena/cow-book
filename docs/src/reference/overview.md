@@ -18,6 +18,8 @@ domain       Space, WeeklyHours, Booking,           cowbook/space.go, hours.go, 
 adapters     internal/memstore (now), internal/postgres (M2)
 ```
 
+The Postgres schema, migrations and local database are in [Database](database.md).
+
 ## Packages
 
 | Package | Holds |
