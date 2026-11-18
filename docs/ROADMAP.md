@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally with `cowbook serve`.
 
-**Next up:** step 2.3.
+**Next up:** step 2.4.
 
 ## How to work
 
@@ -48,7 +48,7 @@ Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for
 
 - [x] **2.1** `compose.yaml`, goose, platform migration: `tenants` and the `shared` schema. *Go: `go tool` directive.*
 - [x] **2.2** Tenant migration (locations, spaces, members) and a provisioning function that creates `tenant_<id>` and migrates it, with cleanup on failure. Must confirm goose works per schema (see [Database roles](#database-roles)). *Go: `embed`, `database/sql` vs pgx, `pgx.Identifier`.* Brought `cowbook create-tenant <slug> <name>` forward from 3.2 as the runnable result.
-- [ ] **2.3** Bookings tenant migration with the exclusion constraint, shown working with raw SQL. Also stores who made the booking, the approval deadline and the approval time. The constraint ignores only cancelled rows, so pending bookings hold their slot.
+- [x] **2.3** Bookings tenant migration with the exclusion constraint, shown working with raw SQL. Also stores who made the booking, the approval deadline and the approval time. The constraint ignores only cancelled rows, so pending bookings hold their slot. Added `make migrate-tenant TENANT=tenant_<id>` so existing tenants get the new version.
 - [ ] **2.4** sqlc setup, pgx pool, `WithTenant` transaction wrapper, space store. A test proves `search_path` doesn't carry over on a reused connection. *Go: closures for transaction scope, generated code, build tags.*
 - [ ] **2.5** Booking store: `23P01` maps to `ErrSlotTaken`. Same contract tests as the in-memory store, then many goroutines racing for one slot. Lazy expiry: in the same transaction, `CreateBooking` first cancels lapsed pending bookings that overlap the new one, because a constraint can't use `now()`; approving checks the deadline the same way. *Go: `errors.As`, subtests, shared test helpers.*
 - [ ] **2.6** Cancel in a transaction; the slot is bookable again. Member deletion in one transaction: mark the member deleted and cancel their bookings. A booking insert refuses a member deleted at the same moment (lock the member row, or insert only while the member isn't deleted), proven by a test. *Go: `defer` with rollback.*
@@ -174,6 +174,12 @@ Agent's calls, open to rejection:
 - **Deleted members are refused first:** `BookingService.Cancel` and `Approve` look up a member actor before anything else and return `ErrMemberDeleted`. It's about the actor themselves, so it leaks nothing, and it reads better than `ErrAlreadyCancelled`. Staff still cancel a deleted member's bookings. Cost: one more store read per member request.
 - **`SaveDeletion` lives on `MemberStore`:** no fourth interface. Cost: whatever implements `MemberStore` for `BookingService` must implement it too.
 - **`MemberService.Delete` takes no actor yet:** who may delete arrives with member management (3.7) and role checks (4.6).
+- **Bookings in a new migration (2.3):** `00002_bookings.sql`, not an edit of the applied `00001`.
+- **`booked_by` without a foreign key (2.3):** the staff table arrives in M4, which adds it.
+- **Booking references don't cascade (2.3):** a space or member with bookings can't be deleted, so history stays. Members are soft-deleted.
+- **Approval columns checked in the table (2.3):** `booked_by` and `approval_deadline` are set together, and `approved_at` needs a deadline. Capacity, length and opening hours stay in `NewBooking`.
+- **`make migrate-check` in a throwaway database (2.3):** its `reset` used to run in the dev database, where it would drop `platform.tenants` with every tenant row. From 2.3 tenant constraints depend on `btree_gist`, so it failed there instead. It now creates, checks and drops `cowbook_migrate_check`.
+- **`make migrate-tenant` (2.3):** migrates one existing tenant with goose, `search_path` passed in the URL. A stopgap until 5.5 migrates every tenant.
 - **The store guards the cancel write:** cancelling is read, check, write, so two simultaneous cancels can both pass `Booking.Cancel`. `SaveCancellation` must give the loser `ErrAlreadyCancelled`. Real concurrency is tested in 1.8 and 2.6.
 
 ## How each README rule is enforced

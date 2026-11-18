@@ -19,6 +19,7 @@
 - [1.10 REPL catches up](concepts/1.10-repl-catches-up.md)
 - [2.1 Postgres and migrations](concepts/2.1-postgres-and-migrations.md)
 - [2.2 Tenant schemas](concepts/2.2-tenant-schemas.md)
+- [2.3 Bookings in the database](concepts/2.3-bookings.md)
 
 # Reference
 

@@ -5,6 +5,7 @@ Each topic links to the steps where it shows up.
 | Topic | Steps |
 | --- | --- |
 | Accessor methods on unexported fields | [1.8](1.8-in-memory-store.md#values-copies-and-accessors), [1.10](1.10-repl-catches-up.md#more-accessors) |
+| Applied migrations never change | [2.3](2.3-bookings.md#a-new-migration-not-an-edited-one) |
 | Arrays vs slices | [1.2](1.2-opening-hours.md#arrays-slices-and-sorting) |
 | `bufio.Scanner`, reading lines | [1.9](1.9-repl.md#reading-lines-with-bufioscanner) |
 | Build tags (`//go:build`), integration tests | [2.2](2.2-tenant-schemas.md#integration-tests-and-build-tags) |
@@ -25,9 +26,10 @@ Each topic links to the steps where it shows up.
 | Email validation (`net/mail`) | [1.4](1.4-members-and-actors.md#validating-emails) |
 | `embed` and `fs.Sub` | [2.2](2.2-tenant-schemas.md#embedding-files-with-embed) |
 | `.env` and `.env.example` | [2.1](2.1-postgres-and-migrations.md#env-and-envexample) |
-| `errors.As`, `pgconn.PgError` | [2.2](2.2-tenant-schemas.md#checking-which-constraint-refused-a-row) |
+| `errors.As`, `pgconn.PgError` | [2.2](2.2-tenant-schemas.md#checking-which-constraint-refused-a-row), [2.3](2.3-bookings.md#exclusion-constraints) |
 | `errors.Is` | [1.3](1.3-booking-rules.md#errorsis), [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
 | `errors.Join` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
+| Exclusion constraints, GiST, `btree_gist` | [2.3](2.3-bookings.md#exclusion-constraints) |
 | Exported vs unexported names | [1.1](1.1-space.md#exported-and-unexported-names) |
 | `fstest.MapFS` | [2.2](2.2-tenant-schemas.md#faking-a-file-system-with-fstestmapfs) |
 | Functions as values | [1.5](1.5-services-and-stores.md#dependency-injection-including-the-clock) |
@@ -48,13 +50,16 @@ Each topic links to the steps where it shows up.
 | Methods and receivers | [1.2](1.2-opening-hours.md#methods), [1.4](1.4-members-and-actors.md#pointer-vs-value-receivers) |
 | Migrations with goose, up and down | [2.1](2.1-postgres-and-migrations.md#migrations-with-goose) |
 | Modules, packages, `go.mod` | [0.1](0.1-foundation.md#modules-and-packages) |
-| Partial unique indexes | [2.2](2.2-tenant-schemas.md#the-tenant-tables) |
+| `NULL` vs Go zero values | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#null-and-gos-zero-time) |
+| Partial unique indexes and constraints | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#a-partial-constraint-and-why-now-cant-be-in-it) |
 | `pgx.Identifier`, SQL names vs parameters | [2.2](2.2-tenant-schemas.md#building-sql-names-safely-pgxidentifier) |
 | Pointer vs value receivers | [1.4](1.4-members-and-actors.md#pointer-vs-value-receivers) |
 | Postgres schemas and `search_path` | [2.1](2.1-postgres-and-migrations.md#three-kinds-of-schema) |
 | psql `ON_ERROR_ROLLBACK` | [2.1](2.1-postgres-and-migrations.md#on_error_rollback) |
 | Range copies; changing slice elements by index | [1.7](1.7-deleting-a-member.md#slices-of-values-changing-elements-in-a-loop) |
+| Range types, `tstzrange` and `[)` bounds | [2.3](2.3-bookings.md#ranges-and-half-open-bounds) |
 | Read, check, write: the store decides the winner | [1.5](1.5-services-and-stores.md#read-check-write), [1.8](1.8-in-memory-store.md#why-the-store-decides-the-winner) |
+| Rules the database checks vs rules in Go | [2.3](2.3-bookings.md#rules-the-database-checks-and-rules-it-leaves-to-go) |
 | Saving a batch all or nothing | [1.7](1.7-deleting-a-member.md#a-batch-saved-all-or-nothing) |
 | `search_path` and `current_schema()` | [2.2](2.2-tenant-schemas.md#one-goose-table-per-schema) |
 | Sentinel errors | [1.1](1.1-space.md#sentinel-errors), [1.9](1.9-repl.md#errors-for-control-flow) |

@@ -119,7 +119,7 @@ func TestCreateTenant(t *testing.T) {
 
 	// goose's version table must be in the tenant's schema, not in public or
 	// shared: each tenant tracks its own version.
-	for _, table := range []string{"locations", "spaces", "opening_windows", "members", "goose_db_version"} {
+	for _, table := range []string{"locations", "spaces", "opening_windows", "members", "bookings", "goose_db_version"} {
 		var exists bool
 		err := pool.QueryRow(t.Context(),
 			"SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = $1 AND tablename = $2)",
@@ -138,8 +138,8 @@ func TestCreateTenant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read version: %v", err)
 	}
-	if version != 1 {
-		t.Errorf("version = %d, want 1", version)
+	if version != 2 {
+		t.Errorf("version = %d, want 2", version)
 	}
 }
 

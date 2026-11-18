@@ -20,9 +20,10 @@ Postgres 18, one database for every operator, one schema per operator. So far on
 | `make db-down` | Stop it; data stays in the `pgdata` volume |
 | `make db-psql` | Open `psql` inside the container |
 | `make migrate-platform` | Apply `migrations/platform` and print the status |
-| `make migrate-check` | Up, reset, up: proves every Down migration works |
+| `make migrate-check` | Up, reset, up for `migrations/platform`, in a throwaway `cowbook_migrate_check` database: proves every Down migration works. Tenant migrations get the same check in `TestTenantMigrationsDownAndUp` |
 | `make test-integration` | Tests tagged `integration`, against `DATABASE_URL` |
 | `make create-tenant SLUG=... NAME=...` | Runs `cowbook create-tenant` with `.env` loaded |
+| `make migrate-tenant TENANT=tenant_<id>` | Applies new `migrations/tenant` versions to one existing tenant; exit 2 on a bad name |
 
 ## Schemas
 
@@ -78,6 +79,7 @@ If step 2, 3 or 4 fails, it drops the schema and deletes the row.
 | Version | Creates |
 | --- | --- |
 | `00001_tenant.sql` | `locations`, `spaces`, `opening_windows`, `members` |
+| `00002_bookings.sql` | `bookings` |
 
 ### `locations`
 
@@ -123,3 +125,25 @@ One open period on one weekday, the rows of a `WeeklyHours`. Primary key
 | `email` | `text` | Lowercased and trimmed (`members_email_normalized`); unique among members not deleted (`members_email_key`, a partial unique index) |
 | `created_at`, `updated_at` | `timestamptz` | Default `now()` |
 | `deleted_at` | `timestamptz` | `NULL` until the member is deleted |
+
+### `bookings`
+
+One booking of a space for a member. The rows of a `Booking`; a `NULL` here is a zero value there.
+
+| Column | Type | Rule |
+| --- | --- | --- |
+| `id` | `bigint` | Identity, `GENERATED ALWAYS` |
+| `space_id` | `bigint` | References `spaces` (`bookings_space_id_fkey`); a space with bookings can't be deleted |
+| `member_id` | `bigint` | References `members` (`bookings_member_id_fkey`); a member with bookings can't be deleted, only soft-deleted. Indexed by `bookings_member_id_idx` |
+| `booked_by` | `bigint` | Staff ID, `NULL` when the member booked. No foreign key until the staff table (M4) |
+| `attendees` | `integer` | At least 1 (`bookings_attendees_positive`); capacity is checked by `NewBooking` |
+| `starts_at`, `ends_at` | `timestamptz` | `starts_at < ends_at` (`bookings_starts_before_ends`); `ends_at` is not included |
+| `approval_deadline` | `timestamptz` | Set exactly when `booked_by` is (`bookings_approval_iff_staff`) |
+| `approved_at` | `timestamptz` | `NULL` until approved; only with a deadline (`bookings_approved_needs_deadline`) |
+| `cancelled_at` | `timestamptz` | `NULL` until cancelled or declined |
+| `created_at`, `updated_at` | `timestamptz` | Default `now()` |
+
+`bookings_no_overlap` is an exclusion constraint, `EXCLUDE USING gist (space_id WITH =,
+tstzrange(starts_at, ends_at) WITH &&) WHERE (cancelled_at IS NULL)`: no two bookings of one space
+overlap unless one is cancelled. Pending bookings count, even past their deadline. A refused
+insert has SQLSTATE `23P01`.
