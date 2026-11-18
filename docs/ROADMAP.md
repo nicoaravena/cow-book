@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally with `cowbook serve`.
 
-**Next up:** step 2.2.
+**Next up:** step 2.3.
 
 ## How to work
 
@@ -47,7 +47,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for example two overlapping inserts, the second refused). From 2.4 `cowbook repl` takes `-store=postgres`, so data survives a restart.
 
 - [x] **2.1** `compose.yaml`, goose, platform migration: `tenants` and the `shared` schema. *Go: `go tool` directive.*
-- [ ] **2.2** Tenant migration (locations, spaces, members) and a provisioning function that creates `tenant_<id>` and migrates it, with cleanup on failure. Must confirm goose works per schema (see [Database roles](#database-roles)). *Go: `embed`, `database/sql` vs pgx, `pgx.Identifier`.*
+- [x] **2.2** Tenant migration (locations, spaces, members) and a provisioning function that creates `tenant_<id>` and migrates it, with cleanup on failure. Must confirm goose works per schema (see [Database roles](#database-roles)). *Go: `embed`, `database/sql` vs pgx, `pgx.Identifier`.* Brought `cowbook create-tenant <slug> <name>` forward from 3.2 as the runnable result.
 - [ ] **2.3** Bookings tenant migration with the exclusion constraint, shown working with raw SQL. Also stores who made the booking, the approval deadline and the approval time. The constraint ignores only cancelled rows, so pending bookings hold their slot.
 - [ ] **2.4** sqlc setup, pgx pool, `WithTenant` transaction wrapper, space store. A test proves `search_path` doesn't carry over on a reused connection. *Go: closures for transaction scope, generated code, build tags.*
 - [ ] **2.5** Booking store: `23P01` maps to `ErrSlotTaken`. Same contract tests as the in-memory store, then many goroutines racing for one slot. Lazy expiry: in the same transaction, `CreateBooking` first cancels lapsed pending bookings that overlap the new one, because a constraint can't use `now()`; approving checks the deadline the same way. *Go: `errors.As`, subtests, shared test helpers.*
@@ -58,7 +58,7 @@ Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for
 Runnable: 3.1-3.2 add the `serve`, `migrate` and `create-tenant` subcommands, the server exercised with `curl`. From 3.3 `cowbook repl` takes `-server http://localhost:8080` and talks to the running server. Its commands go through a small `Backend` interface with an in-process and an HTTP implementation, and each new endpoint gets a REPL command. Whether in-process mode stays is decided at 3.3.
 
 - [ ] **3.1** `cowbook serve`: config from env, `slog`, `/healthz`, graceful shutdown. *Go: `signal.NotifyContext`, `http.Server`.*
-- [ ] **3.2** `cowbook migrate` and `cowbook create-tenant` subcommands for local use; dispatch moves from a `switch` on `os.Args` to `flag`. *Go: `flag`, `flag.NewFlagSet` per subcommand, exit codes.*
+- [ ] **3.2** `cowbook migrate` subcommand for local use, and `create-tenant` (added in 2.2) moves with it; dispatch moves from a `switch` on `os.Args` to `flag`. *Go: `flag`, `flag.NewFlagSet` per subcommand, exit codes.*
 - [ ] **3.3** chi, tenant middleware, `GET spaces`, JSON helpers. *Go: handlers, middleware as function wrapping, `httptest`.*
 - [ ] **3.4** Availability for a space and date.
 - [ ] **3.5** `POST bookings` with error-to-status mapping (409, 422). Uses a **temporary** `X-Member-ID` header, removed in 4.3, which builds a member `Actor`. Staff booking for a member waits for staff login.
@@ -140,6 +140,9 @@ Decided by the user:
 - **Member deletion:** members are soft-deleted. The record stays, so bookings and history still point at a real member.
 - **Booking for a member:** staff can book for a member, and the member must approve it. Until then the booking is pending and holds the slot. If the member doesn't approve by the approval deadline, it lapses and frees the slot.
 - **Deleted members:** they can't cancel bookings. Deleting a member cancels their bookings automatically.
+- **Opening hours storage (2.2):** a child table `opening_windows`, one row per window, rather than a `jsonb` column.
+- **Email reuse (2.2):** a deleted member's email can register again.
+- **`create-tenant` early (2.2):** brought forward from 3.2 as 2.2's runnable result.
 
 Proposed by Agent and accepted in conversation:
 
@@ -261,6 +264,8 @@ Already added: `staticcheck` and goose (v3.29.0), as `go tool` entries; image `p
 - **Reused connections:** a mistake here could expose the wrong tenant, so settings are transaction-local and tested in 2.4. pgx's prepared statement cache can raise errors while schemas are on different versions; 2.4 checks this and picks a pgx query mode.
 - **Shared instance:** one operator's heavy use can still affect others beyond what rate limits catch, because schemas don't separate CPU or disk. Dedicated databases remain a documented future option.
 - **goose's driver list in `go.mod`:** the goose command imports drivers for many databases, so `go.mod` and `go.sum` carry dozens of indirect entries that `cowbook` never builds. `cowbook migrate` (3.2) uses goose as a library with pgx only; the tool entry could then go.
+- **Interrupted provisioning:** cleanup after a failed step is done by hand, because goose runs its own transactions. If the process dies mid-way, the tenant row stays at `provisioning`, maybe with a schema. Signup (5.3) must handle rows stuck there.
+- **Integration tests share the dev database:** they only create `test-` tenants and remove them, but they use up tenant ids.
 - **Superuser until 5.1:** the compose database's `cowbook` user owns everything and every command connects as it.
 - **In-memory rate limiter:** works for one process only; multiple instances would need a shared store. Acceptable since this runs locally.
 - **Limited support view:** with no member or booking totals, support can't tell how busy an operator is, and the platform can't estimate cost per operator from this view. That part of the README stays open.
@@ -271,7 +276,7 @@ Already added: `staticcheck` and goose (v3.29.0), as `go tool` entries; image `p
   - Who may delete: no actor check yet. Member management arrives in 3.7 and role checks in 4.6.
   - Acting as a deleted member: `BookingService.Book`, `Cancel` and `Approve` refuse it. Login must also refuse deleted members (4.2).
   - Deletion reads, then saves: `MemberService.Delete` lists the bookings to cancel before `SaveDeletion`, so a booking created in between stays active. 2.6 closes this inside one transaction.
-  - Email reuse: the unique email index in 2.2 must decide whether a deleted member's email can register again. A partial index (`WHERE deleted_at IS NULL`) allows it.
+  - Email reuse: decided in 2.2. The partial unique index `members_email_key` (`WHERE deleted_at IS NULL`) lets a deleted member's email register again.
   - Personal data: soft delete keeps the name and email. Erasing them on request is not covered.
 - **Pending bookings can block slots:** staff can hold a slot for up to 24 hours with a booking the member never approves. Visible in the day's view; a shorter deadline or a per-staff limit would be the fix.
 - **Deleting and booking at once:** until 2.6, a booking for a member can slip in while that member is being deleted.

@@ -18,6 +18,7 @@
 - [1.9 REPL](concepts/1.9-repl.md)
 - [1.10 REPL catches up](concepts/1.10-repl-catches-up.md)
 - [2.1 Postgres and migrations](concepts/2.1-postgres-and-migrations.md)
+- [2.2 Tenant schemas](concepts/2.2-tenant-schemas.md)
 
 # Reference
 

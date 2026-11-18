@@ -27,7 +27,9 @@ The Postgres schema, migrations and local database are in [Database](database.md
 | `cowbook` | Domain types and rules, the services, the store interfaces, every sentinel error |
 | `internal/memstore` | In-memory store for tests and local runs. See [Stores](stores.md) |
 | `internal/repl` | The REPL's commands: parse words, call a service, print. See [REPL](repl.md) |
-| `cmd/cowbook` | The one binary and composition root: its subcommands wire stores, clock and services together. Today only `repl` |
+| `internal/postgres` | Postgres adapter. Today the `Provisioner`, which creates tenant schemas. See [Database](database.md) |
+| `migrations` | goose SQL migrations, embedded: `Platform` and `Tenant` |
+| `cmd/cowbook` | The one binary and composition root: its subcommands wire stores, clock and services together. `repl` and `create-tenant` |
 
 ## Types at a glance
 
