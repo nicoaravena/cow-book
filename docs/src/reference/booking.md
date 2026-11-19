@@ -17,7 +17,7 @@ There is no status field. The state comes from which timestamps are set (zero me
 Pending and expired bookings both hold their slot. An expired one is cancelled lazily when a new
 booking needs the slot (2.5; the in-memory store doesn't do this).
 
-```
+```text
               NewBooking by member           NewBooking by staff
                      |                              |
                      v                              v

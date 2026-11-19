@@ -209,7 +209,7 @@ Agent's calls, open to rejection:
 
 Layering: delivery (`httpapi`, `web`, `main`) -> `cowbook` services -> `cowbook` domain; `postgres` implements interfaces defined in `cowbook`. The domain imports no database or HTTP packages. The clock is injected.
 
-```
+```text
 cmd/cowbook/main.go      the one binary and composition root: repl, serve, migrate, ...
 cowbook/                 domain + services
 internal/postgres/       store implementations, sqlc output

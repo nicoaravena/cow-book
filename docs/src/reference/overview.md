@@ -4,7 +4,7 @@ All domain code and services live in one package, `cowbook`. Storage adapters li
 `internal/` and implement interfaces that `cowbook` defines. `cowbook` imports nothing from them,
 nor any database or HTTP package.
 
-```
+```text
 delivery     cmd/cowbook: repl (now), serve with httpapi + web (M3+)
         |
         v
