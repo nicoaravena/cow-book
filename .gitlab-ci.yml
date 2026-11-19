@@ -1,0 +1,46 @@
+stages:
+  - test
+  - deploy
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+.pages_default:
+  image: rust:1-slim
+  rules:
+    - changes:
+      - docs/
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/cargo
+  before_script:
+    - export PATH="$PATH:$CARGO_HOME/bin"
+    - mdbook --version || cargo install mdbook
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+  cache:
+    paths:
+      - $CARGO_HOME/bin
+
+test-pages:
+  extends: .pages_default
+  stage: test
+  script:
+    - mdbook test docs
+  artifacts:
+    paths:
+      - test
+  rules:
+    - if: $CI_COMMIT_BRANCH != "main"
+
+deploy-pages:
+  extends: .pages_default
+  stage: deploy
+  script:
+    - mdbook build docs
+  pages: true
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
