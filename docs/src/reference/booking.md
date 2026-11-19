@@ -114,7 +114,7 @@ Read-only, for stores and the REPL outside the package:
 | `ApprovalDeadline()` | When a staff-made booking must be approved by; zero for a member's own booking (1.9) |
 
 Not exposed yet: `bookedBy`, the other timestamps, and a way to rebuild a booking
-from a database row (2.4).
+from a database row (2.5).
 
 ## Known gaps
 

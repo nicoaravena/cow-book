@@ -8,19 +8,22 @@ Each topic links to the steps where it shows up.
 | Applied migrations never change | [2.3](2.3-bookings.md#a-new-migration-not-an-edited-one) |
 | Arrays vs slices | [1.2](1.2-opening-hours.md#arrays-slices-and-sorting) |
 | `bufio.Scanner`, reading lines | [1.9](1.9-repl.md#reading-lines-with-bufioscanner) |
-| Build tags (`//go:build`), integration tests | [2.2](2.2-tenant-schemas.md#integration-tests-and-build-tags) |
+| Build tags (`//go:build`), integration tests | [2.2](2.2-tenant-schemas.md#integration-tests-and-build-tags), [2.4](2.4-sqlc-and-withtenant.md#build-tags-again) |
 | Check constraints, named constraints | [2.1](2.1-postgres-and-migrations.md#the-databases-own-rules) |
+| Closures, for transaction scope | [2.4](2.4-sqlc-and-withtenant.md#closures-for-transaction-scope) |
 | Closing a channel to release many goroutines | [1.8](1.8-in-memory-store.md#goroutines) |
 | Compile-time interface checks (`var _ I = (*T)(nil)`) | [1.8](1.8-in-memory-store.md#compile-time-interface-checks) |
 | Compose, volumes, healthchecks | [2.1](2.1-postgres-and-migrations.md#compose) |
+| Connection pools (`pgxpool`), reused connections | [2.4](2.4-sqlc-and-withtenant.md#a-pool-and-why-connections-get-reused) |
 | Composition root (`main` wires dependencies) | [1.9](1.9-repl.md#a-delivery-adapter) |
 | Constructors (`NewX`) and params structs | [1.1](1.1-space.md#constructors) |
 | `context.Context` | [1.5](1.5-services-and-stores.md#contextcontext) |
-| `context.WithoutCancel` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
+| `context.WithoutCancel` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure), [2.4](2.4-sqlc-and-withtenant.md#defer-and-rolling-back) |
 | Data races and `go test -race` | [1.8](1.8-in-memory-store.md#the-race-detector) |
 | `database/sql` vs pgx, `stdlib.OpenDB` | [2.2](2.2-tenant-schemas.md#databasesql-and-pgx) |
 | Daylight saving time | [1.2](1.2-opening-hours.md#daylight-saving-time) |
 | Defensive copies (`slices.Clone`) | [1.4](1.4-members-and-actors.md#defensive-copies) |
+| `defer` with rollback, panics and `recover` | [2.4](2.4-sqlc-and-withtenant.md#defer-and-rolling-back) |
 | Dependency injection, injected clock | [1.5](1.5-services-and-stores.md#dependency-injection-including-the-clock), [2.2](2.2-tenant-schemas.md#faking-a-file-system-with-fstestmapfs) |
 | Durations (`time.Duration`) | [1.2](1.2-opening-hours.md#durations) |
 | Email validation (`net/mail`) | [1.4](1.4-members-and-actors.md#validating-emails) |
@@ -33,6 +36,7 @@ Each topic links to the steps where it shows up.
 | Exported vs unexported names | [1.1](1.1-space.md#exported-and-unexported-names) |
 | `fstest.MapFS` | [2.2](2.2-tenant-schemas.md#faking-a-file-system-with-fstestmapfs) |
 | Functions as values | [1.5](1.5-services-and-stores.md#dependency-injection-including-the-clock) |
+| Generated code (sqlc, `DO NOT EDIT`) | [2.4](2.4-sqlc-and-withtenant.md#generated-code-with-sqlc) |
 | `go tool` dependencies | [0.1](0.1-foundation.md#go-tool-dependencies), [2.1](2.1-postgres-and-migrations.md#go-tool-again) |
 | `go vet`, `gofmt`, `staticcheck` | [0.1](0.1-foundation.md#the-makefile) |
 | Goroutines | [1.8](1.8-in-memory-store.md#goroutines) |
@@ -53,6 +57,7 @@ Each topic links to the steps where it shows up.
 | `NULL` vs Go zero values | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#null-and-gos-zero-time) |
 | Partial unique indexes and constraints | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#a-partial-constraint-and-why-now-cant-be-in-it) |
 | `pgx.Identifier`, SQL names vs parameters | [2.2](2.2-tenant-schemas.md#building-sql-names-safely-pgxidentifier) |
+| pgx query exec modes, stale prepared plans | [2.4](2.4-sqlc-and-withtenant.md#query-exec-modes-and-stale-plans) |
 | Pointer vs value receivers | [1.4](1.4-members-and-actors.md#pointer-vs-value-receivers) |
 | Postgres schemas and `search_path` | [2.1](2.1-postgres-and-migrations.md#three-kinds-of-schema) |
 | psql `ON_ERROR_ROLLBACK` | [2.1](2.1-postgres-and-migrations.md#on_error_rollback) |
@@ -77,6 +82,7 @@ Each topic links to the steps where it shows up.
 | Test helpers (`t.Helper`) | [1.2](1.2-opening-hours.md#test-helpers) |
 | Tests, `t.Errorf` vs `t.Fatalf` | [0.1](0.1-foundation.md#tests) |
 | Time layouts, `time.Parse`, `time.Date` normalizing | [1.9](1.9-repl.md#parsing-times) |
+| Transaction-local settings (`set_config`, `SET LOCAL`) | [2.4](2.4-sqlc-and-withtenant.md#settings-that-end-with-the-transaction) |
 | Unexported helper methods | [1.6](1.6-who-can-book.md#unexported-helper-methods), [1.7](1.7-deleting-a-member.md#a-rule-without-an-actor) |
 | Validate everything before changing anything | [1.4](1.4-members-and-actors.md#validate-everything-before-changing-anything) |
 | Value types | [1.2](1.2-opening-hours.md#value-types) |

@@ -63,6 +63,6 @@ A `Space` doesn't know its timezone. Its location does, so `SpaceStore.GetSpace`
 ## Not yet
 
 - No accessors for `locationID`, `hours`, `available` or the timestamps, and no way to rebuild a
-  `Space` from a row. `internal/postgres` will need both (2.4).
+  `Space` from a row. `internal/postgres` will need both (2.4b).
 - No create or update service. `memstore.AddSpace` seeds spaces in tests; space management arrives
   in 3.7.

@@ -12,8 +12,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"nicoaravena/cow-book-app/cowbook"
 	"nicoaravena/cow-book-app/internal/memstore"
 	"nicoaravena/cow-book-app/internal/postgres"
@@ -76,7 +74,7 @@ func runCreateTenant(slug, name string) error {
 		return errors.New("DATABASE_URL is not set")
 	}
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, url)
+	pool, err := postgres.NewPool(ctx, url)
 	if err != nil {
 		return err
 	}

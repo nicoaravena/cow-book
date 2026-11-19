@@ -1,0 +1,14 @@
+# sqlc generates typed Go for the SQL in internal/postgres/queries, checked
+# against the tenant migrations. Run make generate after changing either; make
+# lint fails while the generated code is stale.
+version: "2"
+sql:
+  - engine: postgresql
+    # sqlc reads goose files and skips their Down sections.
+    schema: migrations/tenant
+    queries: internal/postgres/queries
+    gen:
+      go:
+        package: tenantdb
+        out: internal/postgres/tenantdb
+        sql_package: pgx/v5

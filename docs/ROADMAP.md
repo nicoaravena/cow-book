@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally with `cowbook serve`.
 
-**Next up:** step 2.4.
+**Next up:** step 2.4b.
 
 ## How to work
 
@@ -44,14 +44,16 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 ### M2: Postgres
 
-Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for example two overlapping inserts, the second refused). From 2.4 `cowbook repl` takes `-store=postgres`, so data survives a restart.
+Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for example two overlapping inserts, the second refused). 2.4-2.6 are run through their integration tests. From 2.7 `cowbook repl` takes `-store=postgres`, so data survives a restart.
 
 - [x] **2.1** `compose.yaml`, goose, platform migration: `tenants` and the `shared` schema. *Go: `go tool` directive.*
 - [x] **2.2** Tenant migration (locations, spaces, members) and a provisioning function that creates `tenant_<id>` and migrates it, with cleanup on failure. Must confirm goose works per schema (see [Database roles](#database-roles)). *Go: `embed`, `database/sql` vs pgx, `pgx.Identifier`.* Brought `cowbook create-tenant <slug> <name>` forward from 3.2 as the runnable result.
 - [x] **2.3** Bookings tenant migration with the exclusion constraint, shown working with raw SQL. Also stores who made the booking, the approval deadline and the approval time. The constraint ignores only cancelled rows, so pending bookings hold their slot. Added `make migrate-tenant TENANT=tenant_<id>` so existing tenants get the new version.
-- [ ] **2.4** sqlc setup, pgx pool, `WithTenant` transaction wrapper, space store. A test proves `search_path` doesn't carry over on a reused connection. *Go: closures for transaction scope, generated code, build tags.*
+- [x] **2.4** sqlc setup, pgx pool with query mode `describe_exec`, `WithTenant` transaction wrapper. Tests prove `search_path` doesn't carry over on a reused connection (after a commit, an error and a panic), and show why the default `cache_statement` mode fails across tenants on different schema versions. Split from the space store, now 2.4b. *Go: closures for transaction scope, `defer` with rollback, generated code, build tags.*
+- [ ] **2.4b** Space store: a `cowbook` function that rebuilds a `Space` from stored values, and accessors for its location, hours, availability and timestamps. `GetSpace` with its location's timezone and opening windows, plus create and list, all through `WithTenant`. Integration tests. *Go: mapping rows to domain types.*
 - [ ] **2.5** Booking store: `23P01` maps to `ErrSlotTaken`. Same contract tests as the in-memory store, then many goroutines racing for one slot. Lazy expiry: in the same transaction, `CreateBooking` first cancels lapsed pending bookings that overlap the new one, because a constraint can't use `now()`; approving checks the deadline the same way. *Go: `errors.As`, subtests, shared test helpers.*
-- [ ] **2.6** Cancel in a transaction; the slot is bookable again. Member deletion in one transaction: mark the member deleted and cancel their bookings. A booking insert refuses a member deleted at the same moment (lock the member row, or insert only while the member isn't deleted), proven by a test. *Go: `defer` with rollback.*
+- [ ] **2.6** Cancel in a transaction; the slot is bookable again. Member deletion in one transaction: mark the member deleted and cancel their bookings. A booking insert refuses a member deleted at the same moment (lock the member row, or insert only while the member isn't deleted), proven by a test. *Go: transactions spanning several queries.*
+- [ ] **2.7** Creating and listing members in Postgres (2.6 brings `GetMember` and `SaveDeletion`), and `cowbook repl -store=postgres -tenant=<slug>`: the REPL over the three Postgres stores, so data survives a restart. The slug is looked up in `platform.tenants`. The REPL's session stops holding `*memstore.Store` and takes a small interface both stores meet. *Go: interfaces defined by the consumer.*
 
 ### M3: HTTP API
 
@@ -143,6 +145,8 @@ Decided by the user:
 - **Opening hours storage (2.2):** a child table `opening_windows`, one row per window, rather than a `jsonb` column.
 - **Email reuse (2.2):** a deleted member's email can register again.
 - **`create-tenant` early (2.2):** brought forward from 3.2 as 2.2's runnable result.
+- **2.4 split (2.4):** the plumbing (sqlc, pool, `WithTenant`) stays 2.4, the space store becomes its own step, so each stays reviewable.
+- **REPL on Postgres at M2's end (2.4):** `cowbook repl -store=postgres` waits for 2.7, when spaces, members and bookings are all in Postgres, rather than mixing stores.
 
 Proposed by Agent and accepted in conversation:
 
@@ -180,6 +184,11 @@ Agent's calls, open to rejection:
 - **Approval columns checked in the table (2.3):** `booked_by` and `approval_deadline` are set together, and `approved_at` needs a deadline. Capacity, length and opening hours stay in `NewBooking`.
 - **`make migrate-check` in a throwaway database (2.3):** its `reset` used to run in the dev database, where it would drop `platform.tenants` with every tenant row. From 2.3 tenant constraints depend on `btree_gist`, so it failed there instead. It now creates, checks and drops `cowbook_migrate_check`.
 - **`make migrate-tenant` (2.3):** migrates one existing tenant with goose, `search_path` passed in the URL. A stopgap until 5.5 migrates every tenant.
+- **Query mode `describe_exec` (2.4):** `NewPool` sets it, because pgx's default `cache_statement` fails with `cached plan must not change result type` when tenants on different migration versions share a connection, as during 5.5. Cost: two round trips per query. `exec` (one round trip, parameter types taken from Go values) is the fallback if latency matters.
+- **`WithTenant` takes a closure (2.4):** `fn(q *tenantdb.Queries) error`, so callers never hold the transaction and can't forget to commit, roll back or set the path. Results leave through variables the closure captures.
+- **`set_config('search_path', $1, true)` (2.4):** transaction-local like `SET LOCAL`, and the path is a parameter rather than SQL text.
+- **Generated code committed (2.4):** `go build` needs neither sqlc nor cgo; `make lint` runs `sqlc diff` so it can't fall behind.
+- **Step names 2.4b and 2.7 (2.4):** not renumbering 2.5 and 2.6 keeps about 20 forward references in earlier pages and comments correct.
 - **The store guards the cancel write:** cancelling is read, check, write, so two simultaneous cancels can both pass `Booking.Cancel`. `SaveCancellation` must give the loser `ErrAlreadyCancelled`. Real concurrency is tested in 1.8 and 2.6.
 
 ## How each README rule is enforced
@@ -259,7 +268,7 @@ Added at the step that first needs them, for approval then:
 
 `go-chi/chi/v5`, `jackc/pgx/v5`, `x/crypto`, `x/time`, and as `go tool` entries `sqlc` and `goose`. Image: `postgres:18`.
 
-Already added: `staticcheck` and goose (v3.29.0), as `go tool` entries; image `postgres:18`.
+Already added: `staticcheck`, goose (v3.29.0) and sqlc (v1.31.1), as `go tool` entries; `jackc/pgx/v5`; image `postgres:18`.
 
 ## Risks and trade-offs
 
@@ -267,7 +276,8 @@ Already added: `staticcheck` and goose (v3.29.0), as `go tool` entries; image `p
 - **Schema per tenant, costs at scale:** every operator adds its own tables, indexes and role, so thousands of operators slow backups and catalog lookups and weigh on the README's "economical as operators grow". This won't show up locally. A free tier with many small operators is the case to watch.
 - **Migrations across tenants:** a change runs once per schema, so it takes longer, can fail partway, and leaves tenants on different versions for a while. Old code must keep working during a rollout. 5.5 handles reporting and re-runs.
 - **Signup runs DDL:** a public request ends up creating schemas and roles, so signup needs its own strict rate limit and a separate, more privileged pool.
-- **Reused connections:** a mistake here could expose the wrong tenant, so settings are transaction-local and tested in 2.4. pgx's prepared statement cache can raise errors while schemas are on different versions; 2.4 checks this and picks a pgx query mode.
+- **Reused connections:** a mistake here could expose the wrong tenant. Since 2.4 the `search_path` is transaction-local, and a test on one reused connection proves it's gone after a commit, an error and a panic. pgx's prepared statement cache fails while schemas are on different versions, so the pool uses `describe_exec`, at one extra round trip per query.
+- **sqlc's cost:** it parses SQL with Postgres's parser through cgo, so building the tool needs a C compiler and takes about 30 seconds the first time. It adds about 30 indirect entries to `go.mod`. `go build` of the app needs neither, since the generated code is committed.
 - **Shared instance:** one operator's heavy use can still affect others beyond what rate limits catch, because schemas don't separate CPU or disk. Dedicated databases remain a documented future option.
 - **goose's driver list in `go.mod`:** the goose command imports drivers for many databases, so `go.mod` and `go.sum` carry dozens of indirect entries that `cowbook` never builds. `cowbook migrate` (3.2) uses goose as a library with pgx only; the tool entry could then go.
 - **Interrupted provisioning:** cleanup after a failed step is done by hand, because goose runs its own transactions. If the process dies mid-way, the tenant row stays at `provisioning`, maybe with a schema. Signup (5.3) must handle rows stuck there.
@@ -286,7 +296,7 @@ Already added: `staticcheck` and goose (v3.29.0), as `go tool` entries; image `p
   - Personal data: soft delete keeps the name and email. Erasing them on request is not covered.
 - **Pending bookings can block slots:** staff can hold a slot for up to 24 hours with a booking the member never approves. Visible in the day's view; a shorter deadline or a per-staff limit would be the fix.
 - **Deleting and booking at once:** until 2.6, a booking for a member can slip in while that member is being deleted.
-- **Unexported domain fields:** `Booking`, `Space` and `Member` keep their fields unexported. 1.8 added the read-only accessors `internal/memstore` needs; `internal/postgres` still needs the rest of the accessors and a function to rebuild each type from a row by 2.4.
+- **Unexported domain fields:** `Booking`, `Space` and `Member` keep their fields unexported. 1.8 added the read-only accessors `internal/memstore` needs; `internal/postgres` still needs the rest of the accessors and a function to rebuild each type from a row: `Space` by 2.4b, `Booking` by 2.5, `Member` by 2.6.
 - **Booking IDs can be probed:** `BookingService.Cancel` and `BookingService.Approve` return `ErrBookingNotFound` before they check permission, so a member can tell which booking IDs exist within their own operator. Revisit at 3.6.
 - **The in-memory store is simpler than Postgres:** `internal/memstore` has no lazy expiry, doesn't refuse a booking for a member deleted at the same moment, and replaces whole bookings on save, so a cancel racing an approval drops the approval time. Fine for tests; the Postgres store must not copy these shortcuts (2.5, 2.6).
 - **Staff booking that starts right away:** its approval deadline is its start, which is now, so it can never be approved. It holds the slot until lazy expiry cancels it. Refusing staff bookings that start within some minimum lead time would fix it.

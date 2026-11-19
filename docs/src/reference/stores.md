@@ -67,4 +67,4 @@ decides no races.
 Fields are unexported, so stores read them through accessors: `Booking.SpaceID`, `MemberID`,
 `Start`, `End`, `Cancelled`, `Approved`, and `Member.Deleted`. 1.10 adds `Booking.Attendees`,
 `Booking.State`, `Member.Name`, `Email` and `Space.Name`, `Kind`, `Capacity`, `MaxBookingLength`. Rebuilding a `Booking` from a
-database row still needs a constructor, due in 2.4.
+database row still needs a constructor, due in 2.5; a `Space`, in 2.4b.

@@ -1,7 +1,8 @@
 # Database
 
 Postgres 18, one database for every operator, one schema per operator. So far only
-`cowbook create-tenant` connects to it; 2.4 adds the Postgres stores.
+`cowbook create-tenant` connects to it. Tenant work goes through `WithTenant` (2.4); the stores
+that use it arrive from 2.4b.
 
 ## Running it locally
 
@@ -22,6 +23,7 @@ Postgres 18, one database for every operator, one schema per operator. So far on
 | `make migrate-platform` | Apply `migrations/platform` and print the status |
 | `make migrate-check` | Up, reset, up for `migrations/platform`, in a throwaway `cowbook_migrate_check` database: proves every Down migration works. Tenant migrations get the same check in `TestTenantMigrationsDownAndUp` |
 | `make test-integration` | Tests tagged `integration`, against `DATABASE_URL` |
+| `make generate` | Regenerates `internal/postgres/tenantdb` with sqlc. `make lint` runs `sqlc diff` and fails while it is stale |
 | `make create-tenant SLUG=... NAME=...` | Runs `cowbook create-tenant` with `.env` loaded |
 | `make migrate-tenant TENANT=tenant_<id>` | Applies new `migrations/tenant` versions to one existing tenant; exit 2 on a bad name |
 
@@ -71,6 +73,27 @@ If step 2, 3 or 4 fails, it drops the schema and deletes the row.
 | `0` | Tenant created; prints its id and schema |
 | `1` | `DATABASE_URL` unset, or Postgres refused (slug taken or malformed, migration failed) |
 | `2` | Wrong number of arguments |
+
+## Tenant transactions
+
+In `internal/postgres/db.go`.
+
+| Function | Does |
+| --- | --- |
+| `NewPool(ctx, url)` | Opens a `pgxpool.Pool` with query mode `describe_exec`: types are asked for on every query, never cached, so tenants on different migration versions can share a connection. `cache_statement`, pgx's default, fails there with `cached plan must not change result type` (`0A000`) |
+| `WithTenant(ctx, pool, tenantID, fn)` | Begins a transaction, sets `search_path` to `tenant_<id>, shared` with `set_config(..., true)`, calls `fn` with the generated queries bound to it, and commits if `fn` returns nil. An error from `fn` comes back wrapped (`errors.Is` finds it); an error or a panic rolls back |
+
+The `search_path` is transaction-local, so the connection goes back to the pool without it.
+Outside `WithTenant` tenant tables aren't visible (`42P01`). A tenant without a schema sees no
+tables either. `TestWithTenantSearchPathDoesNotCarryOver` proves it on one reused connection.
+
+Queries live in `internal/postgres/queries/*.sql`, run with unqualified table names. sqlc
+(`sqlc.yaml`) checks them against `migrations/tenant` and generates package `tenantdb`:
+
+| Query | Returns |
+| --- | --- |
+| `CreateLocation(ctx, {Name, Timezone})` | The new location's id |
+| `GetLocation(ctx, id)` | `id`, `name`, `timezone`; `pgx.ErrNoRows` if there's no such location |
 
 ## Tenant migrations
 

@@ -1,4 +1,4 @@
-.PHONY: test test-integration lint docs docs-serve fetch-catppuccin db-up db-down db-psql migrate-platform migrate-check migrate-tenant create-tenant
+.PHONY: test test-integration lint generate docs docs-serve fetch-catppuccin db-up db-down db-psql migrate-platform migrate-check migrate-tenant create-tenant
 
 # .env is optional: test, lint and docs don't need it. Its variables are
 # exported to every recipe, so goose sees DATABASE_URL.
@@ -21,6 +21,12 @@ lint:
 		echo "gofmt needed on:"; echo "$$unformatted"; exit 1; \
 	fi
 	go tool staticcheck -tags integration ./...
+	go tool sqlc diff
+
+# Regenerates internal/postgres/tenantdb from sqlc.yaml, the queries and the
+# tenant migrations. The output is committed; never edit it by hand.
+generate:
+	go tool sqlc generate
 
 docs:
 	mdbook build docs

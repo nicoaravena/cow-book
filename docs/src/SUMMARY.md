@@ -20,6 +20,7 @@
 - [2.1 Postgres and migrations](concepts/2.1-postgres-and-migrations.md)
 - [2.2 Tenant schemas](concepts/2.2-tenant-schemas.md)
 - [2.3 Bookings in the database](concepts/2.3-bookings.md)
+- [2.4 sqlc and WithTenant](concepts/2.4-sqlc-and-withtenant.md)
 
 # Reference
 
