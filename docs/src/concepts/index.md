@@ -4,7 +4,7 @@ Each topic links to the steps where it shows up.
 
 | Topic | Steps |
 | --- | --- |
-| Accessor methods on unexported fields | [1.8](1.8-in-memory-store.md#values-copies-and-accessors), [1.10](1.10-repl-catches-up.md#more-accessors) |
+| Accessor methods on unexported fields | [1.8](1.8-in-memory-store.md#values-copies-and-accessors), [1.10](1.10-repl-catches-up.md#more-accessors), [2.4b](2.4b-space-store.md#rebuilding-through-the-constructor) |
 | Applied migrations never change | [2.3](2.3-bookings.md#a-new-migration-not-an-edited-one) |
 | Arrays vs slices | [1.2](1.2-opening-hours.md#arrays-slices-and-sorting) |
 | `bufio.Scanner`, reading lines | [1.9](1.9-repl.md#reading-lines-with-bufioscanner) |
@@ -12,7 +12,7 @@ Each topic links to the steps where it shows up.
 | Check constraints, named constraints | [2.1](2.1-postgres-and-migrations.md#the-databases-own-rules) |
 | Closures, for transaction scope | [2.4](2.4-sqlc-and-withtenant.md#closures-for-transaction-scope) |
 | Closing a channel to release many goroutines | [1.8](1.8-in-memory-store.md#goroutines) |
-| Compile-time interface checks (`var _ I = (*T)(nil)`) | [1.8](1.8-in-memory-store.md#compile-time-interface-checks) |
+| Compile-time interface checks (`var _ I = (*T)(nil)`) | [1.8](1.8-in-memory-store.md#compile-time-interface-checks), [2.4b](2.4b-space-store.md#a-store-bound-to-one-tenant) |
 | Compose, volumes, healthchecks | [2.1](2.1-postgres-and-migrations.md#compose) |
 | Connection pools (`pgxpool`), reused connections | [2.4](2.4-sqlc-and-withtenant.md#a-pool-and-why-connections-get-reused) |
 | Composition root (`main` wires dependencies) | [1.9](1.9-repl.md#a-delivery-adapter) |
@@ -28,8 +28,9 @@ Each topic links to the steps where it shows up.
 | Durations (`time.Duration`) | [1.2](1.2-opening-hours.md#durations) |
 | Email validation (`net/mail`) | [1.4](1.4-members-and-actors.md#validating-emails) |
 | `embed` and `fs.Sub` | [2.2](2.2-tenant-schemas.md#embedding-files-with-embed) |
+| Embedded structs, promoted fields | [2.4b](2.4b-space-store.md#embedded-structs) |
 | `.env` and `.env.example` | [2.1](2.1-postgres-and-migrations.md#env-and-envexample) |
-| `errors.As`, `pgconn.PgError` | [2.2](2.2-tenant-schemas.md#checking-which-constraint-refused-a-row), [2.3](2.3-bookings.md#exclusion-constraints) |
+| `errors.As`, `pgconn.PgError` | [2.2](2.2-tenant-schemas.md#checking-which-constraint-refused-a-row), [2.3](2.3-bookings.md#exclusion-constraints), [2.4b](2.4b-space-store.md#foreign-key-errors) |
 | `errors.Is` | [1.3](1.3-booking-rules.md#errorsis), [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
 | `errors.Join` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
 | Exclusion constraints, GiST, `btree_gist` | [2.3](2.3-bookings.md#exclusion-constraints) |
@@ -43,6 +44,7 @@ Each topic links to the steps where it shows up.
 | Identity columns, sequence gaps | [2.1](2.1-postgres-and-migrations.md#identity-columns) |
 | Implicit interfaces | [1.5](1.5-services-and-stores.md#implicit-interfaces) |
 | Instants vs wall-clock time, `Time.In` | [1.2](1.2-opening-hours.md#instants-vs-wall-clock) |
+| Integer conversions (`int32(x)`), wrap-around | [2.4b](2.4b-space-store.md#mapping-rows-to-domain-types) |
 | `internal/` packages | [1.8](1.8-in-memory-store.md#internal) |
 | `io.Reader` and `io.Writer` | [1.9](1.9-repl.md#ioreader-and-iowriter) |
 | `iota` enums with a safe zero value | [1.4](1.4-members-and-actors.md#small-enums-with-iota) |
@@ -50,11 +52,13 @@ Each topic links to the steps where it shows up.
 | Logic races vs data races | [1.8](1.8-in-memory-store.md#the-race-detector) |
 | Loop variables per iteration (Go 1.22) | [1.8](1.8-in-memory-store.md#goroutines) |
 | Map iteration order | [1.9](1.9-repl.md#a-map-of-command-functions), [1.10](1.10-repl-catches-up.md#map-order-and-slicessortfunc) |
+| Mapping rows to domain types, `pgtype.Interval` | [2.4b](2.4b-space-store.md#mapping-rows-to-domain-types) |
 | Maps of functions, method values | [1.9](1.9-repl.md#a-map-of-command-functions) |
 | Methods and receivers | [1.2](1.2-opening-hours.md#methods), [1.4](1.4-members-and-actors.md#pointer-vs-value-receivers) |
 | Migrations with goose, up and down | [2.1](2.1-postgres-and-migrations.md#migrations-with-goose) |
 | Modules, packages, `go.mod` | [0.1](0.1-foundation.md#modules-and-packages) |
-| `NULL` vs Go zero values | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#null-and-gos-zero-time) |
+| N+1 queries, grouping rows with a map | [2.4b](2.4b-space-store.md#two-queries-not-one-per-space) |
+| `NULL` vs Go zero values | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#null-and-gos-zero-time), [2.4b](2.4b-space-store.md#mapping-rows-to-domain-types) |
 | Partial unique indexes and constraints | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#a-partial-constraint-and-why-now-cant-be-in-it) |
 | `pgx.Identifier`, SQL names vs parameters | [2.2](2.2-tenant-schemas.md#building-sql-names-safely-pgxidentifier) |
 | pgx query exec modes, stale prepared plans | [2.4](2.4-sqlc-and-withtenant.md#query-exec-modes-and-stale-plans) |
@@ -64,6 +68,7 @@ Each topic links to the steps where it shows up.
 | Range copies; changing slice elements by index | [1.7](1.7-deleting-a-member.md#slices-of-values-changing-elements-in-a-loop) |
 | Range types, `tstzrange` and `[)` bounds | [2.3](2.3-bookings.md#ranges-and-half-open-bounds) |
 | Read, check, write: the store decides the winner | [1.5](1.5-services-and-stores.md#read-check-write), [1.8](1.8-in-memory-store.md#why-the-store-decides-the-winner) |
+| Rebuilding domain types through the constructor | [2.4b](2.4b-space-store.md#rebuilding-through-the-constructor) |
 | Rules the database checks vs rules in Go | [2.3](2.3-bookings.md#rules-the-database-checks-and-rules-it-leaves-to-go) |
 | Saving a batch all or nothing | [1.7](1.7-deleting-a-member.md#a-batch-saved-all-or-nothing) |
 | `search_path` and `current_schema()` | [2.2](2.2-tenant-schemas.md#one-goose-table-per-schema) |
@@ -82,6 +87,7 @@ Each topic links to the steps where it shows up.
 | Test helpers (`t.Helper`) | [1.2](1.2-opening-hours.md#test-helpers) |
 | Tests, `t.Errorf` vs `t.Fatalf` | [0.1](0.1-foundation.md#tests) |
 | Time layouts, `time.Parse`, `time.Date` normalizing | [1.9](1.9-repl.md#parsing-times) |
+| Timestamp precision, Go nanoseconds vs Postgres microseconds | [2.4b](2.4b-space-store.md#timestamps-lose-their-nanoseconds) |
 | Transaction-local settings (`set_config`, `SET LOCAL`) | [2.4](2.4-sqlc-and-withtenant.md#settings-that-end-with-the-transaction) |
 | Unexported helper methods | [1.6](1.6-who-can-book.md#unexported-helper-methods), [1.7](1.7-deleting-a-member.md#a-rule-without-an-actor) |
 | Validate everything before changing anything | [1.4](1.4-members-and-actors.md#validate-everything-before-changing-anything) |

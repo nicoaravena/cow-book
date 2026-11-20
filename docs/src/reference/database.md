@@ -1,8 +1,8 @@
 # Database
 
 Postgres 18, one database for every operator, one schema per operator. So far only
-`cowbook create-tenant` connects to it. Tenant work goes through `WithTenant` (2.4); the stores
-that use it arrive from 2.4b.
+`cowbook create-tenant` and the integration tests connect to it. Tenant work goes through
+`WithTenant` (2.4); `postgres.SpaceStore` (2.4b) is the first store that uses it.
 
 ## Running it locally
 
@@ -94,6 +94,12 @@ Queries live in `internal/postgres/queries/*.sql`, run with unqualified table na
 | --- | --- |
 | `CreateLocation(ctx, {Name, Timezone})` | The new location's id |
 | `GetLocation(ctx, id)` | `id`, `name`, `timezone`; `pgx.ErrNoRows` if there's no such location |
+| `CreateSpace(ctx, {...})` | The new space's id. Takes every `spaces` column but `id`, timestamps included (2.4b) |
+| `CreateOpeningWindow(ctx, {...})` | Nothing; inserts one `opening_windows` row |
+| `GetSpace(ctx, id)` | The space as a `tenantdb.Space` (`sqlc.embed`) plus its location's `timezone`; `pgx.ErrNoRows` if there's no such space |
+| `ListSpaces(ctx)` | Every space, by `id` |
+| `ListOpeningWindows(ctx, spaceID)` | One space's windows, by weekday and opening time |
+| `ListAllOpeningWindows(ctx)` | Every window, by space, weekday and opening time |
 
 ## Tenant migrations
 

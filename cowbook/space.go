@@ -67,6 +67,21 @@ func (s Space) Capacity() int { return s.capacity }
 // MaxBookingLength returns the longest booking the space takes.
 func (s Space) MaxBookingLength() time.Duration { return s.maxBookingLength }
 
+// LocationID returns the ID of the location the space is at.
+func (s Space) LocationID() int64 { return s.locationID }
+
+// Hours returns the space's weekly opening hours.
+func (s Space) Hours() WeeklyHours { return s.hours }
+
+// Available reports whether the space takes bookings.
+func (s Space) Available() bool { return s.available }
+
+// CreatedAt returns when the space was created.
+func (s Space) CreatedAt() time.Time { return s.createdAt }
+
+// UpdatedAt returns when the space last changed.
+func (s Space) UpdatedAt() time.Time { return s.updatedAt }
+
 // SpaceParams holds the values needed to create a Space.
 type SpaceParams struct {
 	LocationID       int64
@@ -108,4 +123,28 @@ func NewSpace(p SpaceParams, now time.Time) (Space, error) {
 		createdAt:        now,
 		updatedAt:        now,
 	}, nil
+}
+
+// SpaceRecord holds a stored space's values: the ones NewSpace takes, plus
+// those a store keeps. SpaceParams is embedded, so its fields read as the
+// record's own: r.Name is r.SpaceParams.Name.
+type SpaceRecord struct {
+	ID int64
+	SpaceParams
+	Available bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// RestoreSpace rebuilds a stored space. It checks r with NewSpace's rules,
+// so a row that breaks one fails here instead of reaching a booking.
+func RestoreSpace(r SpaceRecord) (Space, error) {
+	s, err := NewSpace(r.SpaceParams, r.CreatedAt)
+	if err != nil {
+		return Space{}, err
+	}
+	s.ID = r.ID
+	s.available = r.Available
+	s.updatedAt = r.UpdatedAt
+	return s, nil
 }

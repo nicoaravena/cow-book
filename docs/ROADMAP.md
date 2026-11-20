@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally with `cowbook serve`.
 
-**Next up:** step 2.4b.
+**Next up:** step 2.5.
 
 ## How to work
 
@@ -50,7 +50,7 @@ Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for
 - [x] **2.2** Tenant migration (locations, spaces, members) and a provisioning function that creates `tenant_<id>` and migrates it, with cleanup on failure. Must confirm goose works per schema (see [Database roles](#database-roles)). *Go: `embed`, `database/sql` vs pgx, `pgx.Identifier`.* Brought `cowbook create-tenant <slug> <name>` forward from 3.2 as the runnable result.
 - [x] **2.3** Bookings tenant migration with the exclusion constraint, shown working with raw SQL. Also stores who made the booking, the approval deadline and the approval time. The constraint ignores only cancelled rows, so pending bookings hold their slot. Added `make migrate-tenant TENANT=tenant_<id>` so existing tenants get the new version.
 - [x] **2.4** sqlc setup, pgx pool with query mode `describe_exec`, `WithTenant` transaction wrapper. Tests prove `search_path` doesn't carry over on a reused connection (after a commit, an error and a panic), and show why the default `cache_statement` mode fails across tenants on different schema versions. Split from the space store, now 2.4b. *Go: closures for transaction scope, `defer` with rollback, generated code, build tags.*
-- [ ] **2.4b** Space store: a `cowbook` function that rebuilds a `Space` from stored values, and accessors for its location, hours, availability and timestamps. `GetSpace` with its location's timezone and opening windows, plus create and list, all through `WithTenant`. Integration tests. *Go: mapping rows to domain types.*
+- [x] **2.4b** Space store: a `cowbook` function that rebuilds a `Space` from stored values, and accessors for its location, hours, availability and timestamps. `GetSpace` with its location's timezone and opening windows, plus create and list, all through `WithTenant`. Integration tests. *Go: mapping rows to domain types.*
 - [ ] **2.5** Booking store: `23P01` maps to `ErrSlotTaken`. Same contract tests as the in-memory store, then many goroutines racing for one slot. Lazy expiry: in the same transaction, `CreateBooking` first cancels lapsed pending bookings that overlap the new one, because a constraint can't use `now()`; approving checks the deadline the same way. *Go: `errors.As`, subtests, shared test helpers.*
 - [ ] **2.6** Cancel in a transaction; the slot is bookable again. Member deletion in one transaction: mark the member deleted and cancel their bookings. A booking insert refuses a member deleted at the same moment (lock the member row, or insert only while the member isn't deleted), proven by a test. *Go: transactions spanning several queries.*
 - [ ] **2.7** Creating and listing members in Postgres (2.6 brings `GetMember` and `SaveDeletion`), and `cowbook repl -store=postgres -tenant=<slug>`: the REPL over the three Postgres stores, so data survives a restart. The slug is looked up in `platform.tenants`. The REPL's session stops holding `*memstore.Store` and takes a small interface both stores meet. *Go: interfaces defined by the consumer.*
@@ -189,6 +189,12 @@ Agent's calls, open to rejection:
 - **`set_config('search_path', $1, true)` (2.4):** transaction-local like `SET LOCAL`, and the path is a parameter rather than SQL text.
 - **Generated code committed (2.4):** `go build` needs neither sqlc nor cgo; `make lint` runs `sqlc diff` so it can't fall behind.
 - **Step names 2.4b and 2.7 (2.4):** not renumbering 2.5 and 2.6 keeps about 20 forward references in earlier pages and comments correct.
+- **`RestoreSpace` goes through `NewSpace` (2.4b):** a stored row is checked by the same rules as a new space, so a row changed by hand into something the domain refuses fails on read. Cost: if a rule tightens, old rows stop loading until a migration fixes them.
+- **`SpaceRecord` embeds `SpaceParams` (2.4b):** the record is the params plus what a store keeps, rather than a long parameter list. The same shape should fit `Booking` in 2.5.
+- **The store writes the domain's timestamps (2.4b):** not the column default `now()`, so the injected clock stays the one source of time. pgx stores them cut to the microsecond.
+- **One `SpaceStore` per tenant (2.4b):** `NewSpaceStore(pool, tenantID)`, because `cowbook.SpaceStore.GetSpace` takes no tenant. It holds no connection, so M3 can build one per request.
+- **Unknown location from the foreign key (2.4b):** `CreateSpace` maps `23503` on `spaces_location_id_fkey` to `ErrInvalidLocation` instead of reading the location first, which another request could delete in between.
+- **`ListSpaces` in two queries (2.4b):** spaces, then every opening window grouped in a map, not one query per space. Its signature matches `memstore.ListSpaces` for 2.7.
 - **The store guards the cancel write:** cancelling is read, check, write, so two simultaneous cancels can both pass `Booking.Cancel`. `SaveCancellation` must give the loser `ErrAlreadyCancelled`. Real concurrency is tested in 1.8 and 2.6.
 
 ## How each README rule is enforced
@@ -296,7 +302,8 @@ Already added: `staticcheck`, goose (v3.29.0) and sqlc (v1.31.1), as `go tool` e
   - Personal data: soft delete keeps the name and email. Erasing them on request is not covered.
 - **Pending bookings can block slots:** staff can hold a slot for up to 24 hours with a booking the member never approves. Visible in the day's view; a shorter deadline or a per-staff limit would be the fix.
 - **Deleting and booking at once:** until 2.6, a booking for a member can slip in while that member is being deleted.
-- **Unexported domain fields:** `Booking`, `Space` and `Member` keep their fields unexported. 1.8 added the read-only accessors `internal/memstore` needs; `internal/postgres` still needs the rest of the accessors and a function to rebuild each type from a row: `Space` by 2.4b, `Booking` by 2.5, `Member` by 2.6.
+- **Unexported domain fields:** `Booking`, `Space` and `Member` keep their fields unexported. 1.8 added the read-only accessors `internal/memstore` needs; 2.4b added the rest for `Space` and `RestoreSpace`. `internal/postgres` still needs the same for `Booking` by 2.5 and `Member` by 2.6.
+- **Timestamp precision:** Go keeps nanoseconds, Postgres microseconds, and pgx drops the rest when it stores a time. A value just created and the same value read back aren't `Equal` unless the clock gave whole microseconds. Nothing compares them yet; 2.5 must keep it in mind for booking times.
 - **Booking IDs can be probed:** `BookingService.Cancel` and `BookingService.Approve` return `ErrBookingNotFound` before they check permission, so a member can tell which booking IDs exist within their own operator. Revisit at 3.6.
 - **The in-memory store is simpler than Postgres:** `internal/memstore` has no lazy expiry, doesn't refuse a booking for a member deleted at the same moment, and replaces whole bookings on save, so a cancel racing an approval drops the approval time. Fine for tests; the Postgres store must not copy these shortcuts (2.5, 2.6).
 - **Staff booking that starts right away:** its approval deadline is its start, which is now, so it can never be approved. It holds the slot until lazy expiry cancels it. Refusing staff bookings that start within some minimum lead time would fix it.

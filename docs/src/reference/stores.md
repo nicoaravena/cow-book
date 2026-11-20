@@ -56,6 +56,23 @@ Differences from the Postgres store planned for M2:
 - Saves replace the whole booking, so a cancel that read the booking before an approval was saved
   drops the approval time. The booking still ends cancelled.
 
+### `internal/postgres`
+
+`postgres.SpaceStore` (2.4b), in `internal/postgres/spaces.go`, implements `SpaceStore` for one
+tenant: `NewSpaceStore(pool, tenantID)`. It holds no connection, and every method runs in one
+`WithTenant` transaction, so it sees only that tenant's schema.
+
+| Method | Does | Errors |
+| --- | --- | --- |
+| `CreateSpace(ctx, sp)` | Stores `sp` and one `opening_windows` row per window, all or nothing; returns it with its ID set. Timestamps are `sp`'s, not `now()` | `ErrInvalidLocation` if the tenant has no such location (`23503` on `spaces_location_id_fkey`) |
+| `GetSpace(ctx, id)` | The space and its location's timezone | `ErrSpaceNotFound`; a wrapped error if the stored timezone isn't a real zone |
+| `ListSpaces(ctx)` | Every space, sorted by ID, in two queries | - |
+
+Rows are rebuilt with `RestoreSpace`, so a row that breaks a domain rule, such as a space left
+with no windows, is an error wrapping that rule's sentinel. Times come back cut to the
+microsecond (pgx drops the nanoseconds) and in `time.Local`; compare them with `Equal`. Bookings
+and members follow in 2.5 to 2.7.
+
 ### Test fake
 
 `fakeStore` in `cowbook/service_test.go` implements all three for the service unit tests. It
@@ -66,5 +83,6 @@ decides no races.
 
 Fields are unexported, so stores read them through accessors: `Booking.SpaceID`, `MemberID`,
 `Start`, `End`, `Cancelled`, `Approved`, and `Member.Deleted`. 1.10 adds `Booking.Attendees`,
-`Booking.State`, `Member.Name`, `Email` and `Space.Name`, `Kind`, `Capacity`, `MaxBookingLength`. Rebuilding a `Booking` from a
-database row still needs a constructor, due in 2.5; a `Space`, in 2.4b.
+`Booking.State`, `Member.Name`, `Email` and `Space.Name`, `Kind`, `Capacity`, `MaxBookingLength`. 2.4b adds `Space.LocationID`,
+`Hours`, `Available`, `CreatedAt`, `UpdatedAt`, and `RestoreSpace` to rebuild a `Space` from a row.
+Rebuilding a `Booking` still needs a constructor, due in 2.5, and a `Member` in 2.6.

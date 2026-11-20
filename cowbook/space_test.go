@@ -2,6 +2,7 @@ package cowbook
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -143,5 +144,70 @@ func TestSpaceAccessors(t *testing.T) {
 	}
 	if s.Capacity() != 8 || s.MaxBookingLength() != 4*time.Hour {
 		t.Errorf("Capacity(), MaxBookingLength() = %d, %v, want 8, 4h", s.Capacity(), s.MaxBookingLength())
+	}
+}
+
+func TestRestoreSpace(t *testing.T) {
+	created := time.Date(2026, time.November, 2, 9, 0, 0, 0, time.UTC)
+	p := validSpaceParams()
+	p.Name = "  Room A "
+	r := SpaceRecord{
+		ID:          7,
+		SpaceParams: p,
+		Available:   false,
+		CreatedAt:   created,
+		UpdatedAt:   created.Add(time.Hour),
+	}
+
+	s, err := RestoreSpace(r)
+	if err != nil {
+		t.Fatalf("RestoreSpace() error = %v, want nil", err)
+	}
+
+	if s.ID != 7 {
+		t.Errorf("ID = %d, want 7", s.ID)
+	}
+	if s.LocationID() != 1 {
+		t.Errorf("LocationID() = %d, want 1", s.LocationID())
+	}
+	if s.Name() != "Room A" {
+		t.Errorf("Name() = %q, want %q", s.Name(), "Room A")
+	}
+	if s.Kind() != KindMeetingRoom || s.Capacity() != 8 || s.MaxBookingLength() != 4*time.Hour {
+		t.Errorf("Kind, Capacity, MaxBookingLength = %q, %d, %v, want %q, 8, 4h",
+			s.Kind(), s.Capacity(), s.MaxBookingLength(), KindMeetingRoom)
+	}
+	if !slices.Equal(s.Hours().Windows(), p.Hours.Windows()) {
+		t.Errorf("Hours().Windows() = %v, want %v", s.Hours().Windows(), p.Hours.Windows())
+	}
+	if s.Available() {
+		t.Error("Available() = true, want false as stored")
+	}
+	if !s.CreatedAt().Equal(created) {
+		t.Errorf("CreatedAt() = %v, want %v", s.CreatedAt(), created)
+	}
+	if !s.UpdatedAt().Equal(created.Add(time.Hour)) {
+		t.Errorf("UpdatedAt() = %v, want %v", s.UpdatedAt(), created.Add(time.Hour))
+	}
+}
+
+func TestRestoreSpaceValidates(t *testing.T) {
+	tests := []struct {
+		name   string
+		change func(p *SpaceParams)
+		want   error
+	}{
+		{"capacity 0", func(p *SpaceParams) { p.Capacity = 0 }, ErrInvalidCapacity},
+		{"no opening hours", func(p *SpaceParams) { p.Hours = WeeklyHours{} }, ErrNoOpeningHours},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := validSpaceParams()
+			tt.change(&p)
+			_, err := RestoreSpace(SpaceRecord{ID: 1, SpaceParams: p, Available: true})
+			if !errors.Is(err, tt.want) {
+				t.Errorf("RestoreSpace() error = %v, want %v", err, tt.want)
+			}
+		})
 	}
 }

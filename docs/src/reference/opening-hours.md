@@ -10,6 +10,7 @@ A time of day to the minute. 24:00 is valid and means the very end of the day.
 | Function | Does | Error |
 | --- | --- | --- |
 | `NewClockTime(hour, minute)` | Returns `hour:minute` | `ErrInvalidClockTime` unless 00:00 <= time <= 24:00 and 0 <= minute <= 59 |
+| `Minutes()` | Minutes since midnight, 0 to 1440, as `opening_windows` stores them (2.4b) | - |
 
 ## `OpeningWindow`
 
@@ -31,6 +32,11 @@ A day with no windows is closed. The caller's slice is not kept or changed.
 
 Touching windows (09-12 plus 12-17) are refused because a booking must fit in one window, so
 11-13 would be refused for no visible reason. Write 09-17 instead.
+
+### `Windows() []OpeningWindow`
+
+Every window, Sunday first and each day by opening time; empty when closed all week. The slice is
+new, so changing it doesn't change the hours. Stores write one row per window (2.4b).
 
 ### `Contains(start, end time.Time, loc *time.Location) bool`
 

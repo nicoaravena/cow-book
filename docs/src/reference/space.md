@@ -24,6 +24,15 @@ Rules, in the order checked. The first one broken is returned:
 The 24-hour cap exists because a booking must fit inside one opening window, which is inside one
 day, so a longer limit means nothing.
 
+## `RestoreSpace(r SpaceRecord) (Space, error)`
+
+Rebuilds a stored space, for stores (2.4b). It calls `NewSpace(r.SpaceParams, r.CreatedAt)`, so
+the same rules apply in the same order and the first broken one is returned unchanged. Then it
+sets `ID`, `available` and `updatedAt` from the record.
+
+`SpaceRecord` fields: `ID`, the embedded `SpaceParams` (its fields are promoted, so `r.Name`
+works), `Available`, `CreatedAt`, `UpdatedAt`.
+
 ## `SpaceKind`
 
 A `string` type. Values, as they will be stored and sent over the API:
@@ -37,7 +46,7 @@ A `string` type. Values, as they will be stored and sent over the API:
 
 ## Accessors
 
-Read-only, for the REPL and stores outside the package (1.10):
+Read-only, for the REPL (1.10) and stores outside the package (2.4b):
 
 | Method | Returns |
 | --- | --- |
@@ -45,6 +54,10 @@ Read-only, for the REPL and stores outside the package (1.10):
 | `Kind()` | The `SpaceKind` |
 | `Capacity()` | Most attendees per booking |
 | `MaxBookingLength()` | Longest booking allowed |
+| `LocationID()` | The location's ID |
+| `Hours()` | The `WeeklyHours` |
+| `Available()` | Whether it takes bookings |
+| `CreatedAt()`, `UpdatedAt()` | When it was created and last changed |
 
 ## Fields
 
@@ -54,7 +67,7 @@ Read-only, for the REPL and stores outside the package (1.10):
 | `locationID` | no | Decides what front desk staff may do with its bookings |
 | `name`, `kind`, `capacity`, `maxBookingLength` | no | |
 | `hours` | no | `WeeklyHours`, see [Opening hours](opening-hours.md) |
-| `available` | no | `true` from `NewSpace`. `NewBooking` refuses an unavailable space. Nothing sets it to `false` yet |
+| `available` | no | `true` from `NewSpace`. `NewBooking` refuses an unavailable space. Only `RestoreSpace` can set it to `false` yet |
 | `createdAt`, `updatedAt` | no | |
 
 A `Space` doesn't know its timezone. Its location does, so `SpaceStore.GetSpace` returns the
@@ -62,7 +75,5 @@ A `Space` doesn't know its timezone. Its location does, so `SpaceStore.GetSpace`
 
 ## Not yet
 
-- No accessors for `locationID`, `hours`, `available` or the timestamps, and no way to rebuild a
-  `Space` from a row. `internal/postgres` will need both (2.4b).
-- No create or update service. `memstore.AddSpace` seeds spaces in tests; space management arrives
-  in 3.7.
+- No create or update service. `memstore.AddSpace` and `postgres.SpaceStore.CreateSpace` store
+  spaces built by the caller; space management arrives in 3.7.

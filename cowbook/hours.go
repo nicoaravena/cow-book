@@ -31,6 +31,9 @@ func NewClockTime(hour, minute int) (ClockTime, error) {
 	return ClockTime{minutes: total}, nil
 }
 
+// Minutes returns the minutes since midnight, from 0 to 1440 for 24:00.
+func (c ClockTime) Minutes() int { return c.minutes }
+
 func (c ClockTime) sinceMidnight() time.Duration {
 	return time.Duration(c.minutes) * time.Minute
 }
@@ -74,6 +77,16 @@ func NewWeeklyHours(windows []OpeningWindow) (WeeklyHours, error) {
 	}
 
 	return h, nil
+}
+
+// Windows returns every window, Sunday first and each day by opening time.
+// The slice is new, so changing it leaves h as it was.
+func (h WeeklyHours) Windows() []OpeningWindow {
+	var windows []OpeningWindow
+	for _, day := range h.days {
+		windows = append(windows, day...)
+	}
+	return windows
 }
 
 func (h WeeklyHours) closedAllWeek() bool {

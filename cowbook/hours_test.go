@@ -2,6 +2,7 @@ package cowbook
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -382,5 +383,45 @@ func TestContainsSantiagoDST(t *testing.T) {
 				t.Errorf("Contains(%v, %v) = %v, want %v", tt.start.In(santiago), tt.end.In(santiago), got, tt.want)
 			}
 		})
+	}
+}
+
+func TestClockTimeMinutes(t *testing.T) {
+	tests := []struct {
+		hour, minute int
+		want         int
+	}{
+		{0, 0, 0},
+		{9, 30, 570},
+		{24, 0, 1440},
+	}
+	for _, tt := range tests {
+		if got := at(tt.hour, tt.minute).Minutes(); got != tt.want {
+			t.Errorf("%02d:%02d Minutes() = %d, want %d", tt.hour, tt.minute, got, tt.want)
+		}
+	}
+}
+
+func TestWeeklyHoursWindows(t *testing.T) {
+	sun := OpeningWindow{time.Sunday, at(9, 0), at(10, 0)}
+	monMorning := OpeningWindow{time.Monday, at(8, 0), at(12, 0)}
+	monAfternoon := OpeningWindow{time.Monday, at(13, 0), at(18, 0)}
+	sat := OpeningWindow{time.Saturday, at(10, 0), at(14, 0)}
+	h := mustHours(sat, monAfternoon, monMorning, sun)
+
+	got := h.Windows()
+	want := []OpeningWindow{sun, monMorning, monAfternoon, sat}
+	if !slices.Equal(got, want) {
+		t.Fatalf("Windows() = %v, want %v", got, want)
+	}
+
+	// The result is a new slice: changing it leaves the hours alone.
+	got[0].Close = at(24, 0)
+	if again := h.Windows(); !slices.Equal(again, want) {
+		t.Errorf("after changing the result, Windows() = %v, want %v", again, want)
+	}
+
+	if n := len(WeeklyHours{}.Windows()); n != 0 {
+		t.Errorf("closed all week: len(Windows()) = %d, want 0", n)
 	}
 }
