@@ -26,6 +26,12 @@ WHERE space_id = @space_id
 -- GetBooking returns pgx.ErrNoRows if the tenant has no such booking.
 SELECT * FROM bookings WHERE id = $1;
 
+-- name: ListBookings :many
+-- ListBookings returns every booking, cancelled ones included. A lapsed
+-- pending booking stays uncancelled until lazy expiry reaches it, so callers
+-- read its state with Booking.State.
+SELECT * FROM bookings ORDER BY id;
+
 -- name: ApproveBooking :execrows
 -- ApproveBooking records the approval only while the booking is pending: not
 -- cancelled, not approved, and with a deadline still ahead of @approved_at.

@@ -167,6 +167,32 @@ func TestClock(t *testing.T) {
 	}
 }
 
+// Until 3.7 each timezone stands for one location, so front desk staff
+// assigned to location 2 work at the Madrid space only.
+func TestSpaceTimezonePicksLocation(t *testing.T) {
+	setup := []string{
+		"space add Room-A meeting_room 6 2h",                               // UTC: location 1
+		"space add Desk-1 hot_desk 1 4h mon-fri/09:00-13:00 Europe/Madrid", // location 2
+		"space add Room-B meeting_room 6 2h",                               // UTC again: location 1
+		"member add Ana ana@example.com",
+		"as frontdesk 7 2",
+	}
+	tests := []struct {
+		line, want string
+	}{
+		{"book 2 2026-11-17 09:00-10:00 for 1", "ok booking #1: space 2, Tue 2026-11-17 09:00-10:00 CET, pending: member 1 must approve by Tue 2026-11-17 09:00 CET"},
+		{"book 1 2026-11-17 09:00-10:00 for 1", "error: only the member or the operator's staff can book for this member"},
+		{"book 3 2026-11-17 09:00-10:00 for 1", "error: only the member or the operator's staff can book for this member"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.line, func(t *testing.T) {
+			if got := lastLine(run(t, append(setup, tt.line)...)); got != tt.want {
+				t.Errorf("last line = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSpaceHoursAndTimezone(t *testing.T) {
 	// Saturday 21 November 2026 in Madrid is CET, one hour ahead of UTC.
 	desk := "space add Desk hot_desk 1 8h sat/10:00-14:00,mon-fri/09:00-17:30 Europe/Madrid"
@@ -199,8 +225,10 @@ func TestSpaceHoursAndTimezone(t *testing.T) {
 }
 
 func TestMemberAdd(t *testing.T) {
-	out := run(t, "member add Ana ana@example.com", "member add Bo bo@example.com", "member add Cy not-an-email")
-	want := []string{"ok member #1", "ok member #2", "error: member email is not valid"}
+	out := run(t, "member add Ana ana@example.com", "member add Bo bo@example.com", "member add Cy not-an-email",
+		"member add Ann ANA@example.com", "member delete 1", "member add Ann ana@example.com")
+	want := []string{"ok member #1", "ok member #2", "error: member email is not valid",
+		"error: email is already taken by another member", "ok member #3"}
 	for _, w := range want {
 		if !strings.Contains(out, w+"\n") {
 			t.Errorf("output lacks %q:\n%s", w, out)

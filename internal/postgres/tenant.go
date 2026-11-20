@@ -14,6 +14,30 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
+// ErrTenantNotFound means no tenant has the slug.
+var ErrTenantNotFound = errors.New("tenant not found")
+
+// LookupTenant returns the id of the tenant with slug. It returns
+// ErrTenantNotFound if there is none, and an error naming the status if the
+// tenant isn't active: a provisioning one may have no schema yet, and a
+// suspended one must not be used.
+func LookupTenant(ctx context.Context, pool *pgxpool.Pool, slug string) (int64, error) {
+	var id int64
+	var status string
+	err := pool.QueryRow(ctx,
+		"SELECT id, status FROM platform.tenants WHERE slug = $1", slug).Scan(&id, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, fmt.Errorf("%w: %q", ErrTenantNotFound, slug)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("look up tenant: %w", err)
+	}
+	if status != "active" {
+		return 0, fmt.Errorf("tenant %q is %s, not active", slug, status)
+	}
+	return id, nil
+}
+
 // SchemaName returns the name of tenant id's schema. It is built only from
 // the numeric id, never from the slug or any other user input.
 func SchemaName(id int64) string {

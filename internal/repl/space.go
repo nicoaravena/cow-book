@@ -11,9 +11,6 @@ import (
 	"nicoaravena/cow-book-app/cowbook"
 )
 
-// locationID is the location every space goes to. Locations arrive in 3.7.
-const locationID = 1
-
 // defaultHours is used when space add is given no hours.
 const defaultHours = "mon-fri/08:00-20:00"
 
@@ -25,12 +22,15 @@ func (s *Session) space(ctx context.Context, args []string) (string, error) {
 	case len(args) == 1 && args[0] == "list":
 		return s.spaceList(ctx)
 	case len(args) >= 5 && len(args) <= 7 && args[0] == "add":
-		return s.spaceAdd(args)
+		return s.spaceAdd(ctx, args)
 	}
 	return "", errUsage
 }
 
-func (s *Session) spaceAdd(args []string) (string, error) {
+// spaceAdd adds a space at the location for its timezone: until locations
+// arrive in 3.7, each timezone stands for one location, so spaces in UTC share
+// one and a space in Europe/Madrid gets another.
+func (s *Session) spaceAdd(ctx context.Context, args []string) (string, error) {
 	capacity, err := strconv.Atoi(args[3])
 	if err != nil {
 		return "", fmt.Errorf("capacity %q is not a number", args[3])
@@ -59,6 +59,10 @@ func (s *Session) spaceAdd(args []string) (string, error) {
 			return "", fmt.Errorf("unknown timezone %q", args[6])
 		}
 	}
+	locationID, err := s.store.LocationFor(ctx, loc)
+	if err != nil {
+		return "", err
+	}
 
 	sp, err := cowbook.NewSpace(cowbook.SpaceParams{
 		LocationID:       locationID,
@@ -71,9 +75,9 @@ func (s *Session) spaceAdd(args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	s.lastSpaceID++
-	sp.ID = s.lastSpaceID
-	s.store.AddSpace(sp, loc)
+	if sp, err = s.store.CreateSpace(ctx, sp); err != nil {
+		return "", err
+	}
 	return fmt.Sprintf("ok space #%d", sp.ID), nil
 }
 

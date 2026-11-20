@@ -24,6 +24,7 @@
 - [2.4b Space store](concepts/2.4b-space-store.md)
 - [2.5 Booking store](concepts/2.5-booking-store.md)
 - [2.6 Cancelling and deleting in transactions](concepts/2.6-cancel-and-delete.md)
+- [2.7 The REPL on Postgres](concepts/2.7-repl-on-postgres.md)
 
 # Reference
 

@@ -272,3 +272,26 @@ func TestTenantConstraints(t *testing.T) {
 		})
 	}
 }
+
+func TestLookupTenant(t *testing.T) {
+	pool := testPool(t)
+	id := createTestTenant(t, pool)
+	var slug string
+	if err := pool.QueryRow(t.Context(), "SELECT slug FROM platform.tenants WHERE id = $1", id).Scan(&slug); err != nil {
+		t.Fatalf("read slug: %v", err)
+	}
+
+	if got, err := LookupTenant(t.Context(), pool, slug); err != nil || got != id {
+		t.Errorf("LookupTenant(%q) = %d, %v; want %d, nil", slug, got, err, id)
+	}
+	if _, err := LookupTenant(t.Context(), pool, "no-such-tenant"); !errors.Is(err, ErrTenantNotFound) {
+		t.Errorf("unknown slug: LookupTenant error = %v, want %v", err, ErrTenantNotFound)
+	}
+
+	if _, err := pool.Exec(t.Context(), "UPDATE platform.tenants SET status = 'suspended' WHERE id = $1", id); err != nil {
+		t.Fatalf("suspend: %v", err)
+	}
+	if _, err := LookupTenant(t.Context(), pool, slug); err == nil || errors.Is(err, ErrTenantNotFound) {
+		t.Errorf("suspended tenant: LookupTenant error = %v, want a status error", err)
+	}
+}

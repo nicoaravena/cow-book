@@ -272,3 +272,32 @@ func TestSpaceStoreNoWindows(t *testing.T) {
 		t.Errorf("GetSpace error = %v, want ErrNoOpeningHours", err)
 	}
 }
+
+func TestSpaceStoreLocationFor(t *testing.T) {
+	pool := testPool(t)
+	tenant := createTestTenant(t, pool)
+	store := NewSpaceStore(pool, tenant)
+	madrid, err := time.LoadLocation("Europe/Madrid")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+	existing := createLocation(t, pool, tenant, "Centre") // in Europe/Madrid
+
+	got, err := store.LocationFor(t.Context(), madrid)
+	if err != nil || got != existing {
+		t.Errorf("existing zone: LocationFor = %d, %v; want %d, nil", got, err, existing)
+	}
+	utc, err := store.LocationFor(t.Context(), time.UTC)
+	if err != nil || utc == existing {
+		t.Fatalf("new zone: LocationFor = %d, %v; want a new location", utc, err)
+	}
+	if again, err := store.LocationFor(t.Context(), time.UTC); err != nil || again != utc {
+		t.Errorf("same zone again: LocationFor = %d, %v; want %d, nil", again, err, utc)
+	}
+
+	// The new location is a real row: a space there reads back in UTC.
+	sp := createSpace(t, store, spaceParams(t, utc, "Desk", weekdays(t, 9, 18)), time.Date(2026, time.November, 19, 10, 0, 0, 0, time.UTC))
+	if _, loc, err := store.GetSpace(t.Context(), sp.ID); err != nil || loc.String() != "UTC" {
+		t.Errorf("GetSpace timezone = %v, %v; want UTC, nil", loc, err)
+	}
+}

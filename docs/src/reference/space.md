@@ -75,5 +75,5 @@ A `Space` doesn't know its timezone. Its location does, so `SpaceStore.GetSpace`
 
 ## Not yet
 
-- No create or update service. `memstore.AddSpace` and `postgres.SpaceStore.CreateSpace` store
-  spaces built by the caller; space management arrives in 3.7.
+- No create or update service. `CreateSpace` on `memstore.Store` and `postgres.SpaceStore` stores
+  spaces built by the caller (memstore's since 2.7); space management arrives in 3.7.

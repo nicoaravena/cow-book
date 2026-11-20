@@ -74,6 +74,9 @@ If step 2, 3 or 4 fails, it drops the schema and deletes the row.
 | `1` | `DATABASE_URL` unset, or Postgres refused (slug taken or malformed, migration failed) |
 | `2` | Wrong number of arguments |
 
+`cowbook repl -store=postgres -tenant=<slug>` finds the tenant with `postgres.LookupTenant`, which
+refuses an unknown slug (`ErrTenantNotFound`) and any tenant not `active` (2.7).
+
 ## Tenant transactions
 
 In `internal/postgres/db.go`.
@@ -94,6 +97,7 @@ Queries live in `internal/postgres/queries/*.sql`, run with unqualified table na
 | --- | --- |
 | `CreateLocation(ctx, {Name, Timezone})` | The new location's id |
 | `GetLocation(ctx, id)` | `id`, `name`, `timezone`; `pgx.ErrNoRows` if there's no such location |
+| `GetLocationByTimezone(ctx, timezone)` | The lowest `id` with that timezone; `pgx.ErrNoRows` if none (2.7) |
 | `CreateSpace(ctx, {...})` | The new space's id. Takes every `spaces` column but `id`, timestamps included (2.4b) |
 | `CreateOpeningWindow(ctx, {...})` | Nothing; inserts one `opening_windows` row |
 | `GetSpace(ctx, id)` | The space as a `tenantdb.Space` (`sqlc.embed`) plus its location's `timezone`; `pgx.ErrNoRows` if there's no such space |
@@ -103,11 +107,14 @@ Queries live in `internal/postgres/queries/*.sql`, run with unqualified table na
 | `CreateBooking(ctx, {...})` | The new booking's id. Takes every `bookings` column but `id`; a NULL column is an invalid `pgtype` value (2.5) |
 | `ExpireLapsedPending(ctx, {Now, SpaceID, StartsAt, EndsAt})` | Rows changed. Cancels at `Now` the space's bookings not cancelled or approved, with `approval_deadline <= Now`, overlapping `[StartsAt, EndsAt)` |
 | `GetBooking(ctx, id)` | The row as a `tenantdb.Booking`; `pgx.ErrNoRows` if there's no such booking |
+| `ListBookings(ctx)` | Every booking, by `id`, cancelled ones included (2.7) |
 | `ApproveBooking(ctx, {ID, ApprovedAt, UpdatedAt})` | Rows changed, 1 or 0. Sets `approved_at` only if not cancelled, not approved, and `approval_deadline > ApprovedAt` |
 | `CancelBooking(ctx, {ID, CancelledAt, UpdatedAt})` | Rows changed, 1 or 0. Sets `cancelled_at` only if not cancelled yet (2.6) |
 | `ListMemberBookingsEndingAfter(ctx, {MemberID, After})` | The member's bookings with `cancelled_at IS NULL` and `ends_at > After`, by start then `id` (2.6) |
 | `CancelMemberBookingsEndingAfter(ctx, {MemberID, Now})` | Rows changed. Cancels at `Now` every booking of the member not cancelled and with `ends_at > Now` (2.6) |
 | `GetMember(ctx, id)` | The row as a `tenantdb.Member`, deleted or not; `pgx.ErrNoRows` if there's no such member (2.6) |
+| `CreateMember(ctx, {Name, Email, CreatedAt, UpdatedAt})` | The new member's id; `23505` on `members_email_key` if a member who isn't deleted has the email (2.7) |
+| `ListMembers(ctx)` | Every member, by `id`, deleted ones included (2.7) |
 | `LockMember(ctx, id)` | The member's `deleted_at`, read `FOR SHARE`: the row stays locked until the transaction ends; `pgx.ErrNoRows` if there's no such member (2.6) |
 | `DeleteMember(ctx, {ID, DeletedAt, UpdatedAt})` | Rows changed, 1 or 0. Sets `deleted_at` only if not deleted yet (2.6) |
 

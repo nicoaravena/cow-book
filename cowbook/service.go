@@ -13,6 +13,8 @@ var (
 	ErrBookingNotFound = errors.New("booking not found")
 	ErrSpaceNotFound   = errors.New("space not found")
 	ErrMemberNotFound  = errors.New("member not found")
+	// ErrEmailTaken means a member who isn't deleted already has the email.
+	ErrEmailTaken = errors.New("email is already taken by another member")
 )
 
 // BookingStore keeps bookings. Each store method takes the caller's context, so

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"nicoaravena/cow-book-app/cowbook"
@@ -16,7 +17,7 @@ import (
 var _ cowbook.MemberStore = (*MemberStore)(nil)
 
 // MemberStore keeps one tenant's members. Every method runs in WithTenant, as
-// in SpaceStore. Creating and listing members arrive in 2.7.
+// in SpaceStore.
 type MemberStore struct {
 	pool     *pgxpool.Pool
 	tenantID int64
@@ -44,6 +45,54 @@ func (s *MemberStore) GetMember(ctx context.Context, id int64) (cowbook.Member, 
 		return cowbook.Member{}, err
 	}
 	return memberFromRow(row)
+}
+
+// CreateMember stores m and returns it with its ID set. It returns
+// cowbook.ErrEmailTaken if a member of the tenant who isn't deleted has m's
+// email: the partial unique index decides, so two racing sign-ups with one
+// email can't both pass.
+func (s *MemberStore) CreateMember(ctx context.Context, m cowbook.Member) (cowbook.Member, error) {
+	err := WithTenant(ctx, s.pool, s.tenantID, func(q *tenantdb.Queries) error {
+		var err error
+		m.ID, err = q.CreateMember(ctx, tenantdb.CreateMemberParams{
+			Name:      m.Name(),
+			Email:     m.Email(),
+			CreatedAt: timestamptz(m.CreatedAt()),
+			UpdatedAt: timestamptz(m.UpdatedAt()),
+		})
+		return err
+	})
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "members_email_key" {
+		return cowbook.Member{}, cowbook.ErrEmailTaken
+	}
+	if err != nil {
+		return cowbook.Member{}, err
+	}
+	return m, nil
+}
+
+// ListMembers returns every member of the tenant, deleted ones included,
+// sorted by ID.
+func (s *MemberStore) ListMembers(ctx context.Context) ([]cowbook.Member, error) {
+	var rows []tenantdb.Member
+	err := WithTenant(ctx, s.pool, s.tenantID, func(q *tenantdb.Queries) error {
+		var err error
+		rows, err = q.ListMembers(ctx)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	members := make([]cowbook.Member, 0, len(rows))
+	for _, row := range rows {
+		m, err := memberFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, m)
+	}
+	return members, nil
 }
 
 // SaveDeletion stores a member that Delete has changed and cancels their

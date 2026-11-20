@@ -11,7 +11,9 @@ Returns a member with `ID` 0 and `createdAt`, `updatedAt` set to `now`.
 
 - The name is trimmed.
 - The email is trimmed and lowercased, since it must be unique per operator: `Ana@x.com` and
-  `ana@x.com` are the same member. Uniqueness itself is the database's job (2.2).
+  `ana@x.com` are the same member. Uniqueness itself is the store's job: `CreateMember` returns
+  `ErrEmailTaken` for an email a member who isn't deleted has (2.7), which Postgres checks with a
+  partial unique index (2.2).
 
 | Rule | Error |
 | --- | --- |
@@ -55,5 +57,6 @@ that rule's error, and the name and email are trimmed and lowercased again.
 ## Not yet
 
 - Login must refuse deleted members (4.2).
-- Whether a deleted member's email can register again is decided by the unique index in 2.2.
+- A deleted member's email can register again: the unique index (2.2) and memstore's check (2.7)
+  ignore deleted members.
 - Name and email are kept after deletion. Erasing them on request is not covered.

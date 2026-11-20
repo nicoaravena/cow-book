@@ -14,9 +14,9 @@ import (
 	"slices"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"nicoaravena/cow-book-app/cowbook"
-	"nicoaravena/cow-book-app/internal/memstore"
 )
 
 // timeFormat shows a moment with its weekday and zone, as in
@@ -30,6 +30,29 @@ var (
 	errQuit = errors.New("quit")
 )
 
+// Store is what a session reads and writes itself, besides what the services
+// do. It is defined here, by its one user, and holds only the methods the
+// commands call. internal/memstore's Store has them all, and so do the
+// three Postgres stores embedded in one struct, so neither package needs to
+// know this interface exists.
+type Store interface {
+	// LocationFor returns the location in timezone tz, adding one if needed.
+	LocationFor(ctx context.Context, tz *time.Location) (int64, error)
+	// CreateSpace stores sp and returns it with its ID set.
+	CreateSpace(ctx context.Context, sp cowbook.Space) (cowbook.Space, error)
+	// GetSpace returns the space and its location's timezone.
+	GetSpace(ctx context.Context, id int64) (cowbook.Space, *time.Location, error)
+	// ListSpaces returns every space, sorted by ID.
+	ListSpaces(ctx context.Context) ([]cowbook.Space, error)
+	// CreateMember stores m and returns it with its ID set, or
+	// cowbook.ErrEmailTaken.
+	CreateMember(ctx context.Context, m cowbook.Member) (cowbook.Member, error)
+	// ListMembers returns every member, deleted ones included, sorted by ID.
+	ListMembers(ctx context.Context) ([]cowbook.Member, error)
+	// ListBookings returns every booking, cancelled ones included, sorted by ID.
+	ListBookings(ctx context.Context) ([]cowbook.Booking, error)
+}
+
 // command is one REPL command. run gets the words after the command's name
 // and returns the text to print.
 type command struct {
@@ -41,7 +64,7 @@ type command struct {
 // Session is one REPL run: the store, the services, the clock and who is
 // acting. One goroutine uses it, so nothing in it is locked.
 type Session struct {
-	store    *memstore.Store
+	store    Store
 	bookings *cowbook.BookingService
 	members  *cowbook.MemberService
 	clock    *Clock
@@ -50,15 +73,12 @@ type Session struct {
 	who      string // "member 1", "admin 2"...; empty until as
 	memberID int64  // the acting member, 0 when staff or nobody acts
 
-	lastSpaceID  int64
-	lastMemberID int64
-
 	commands map[string]command
 }
 
 // NewSession returns a Session over store and the services. clock must be
 // the clock the services were built with, so clock commands move their time.
-func NewSession(store *memstore.Store, bookings *cowbook.BookingService, members *cowbook.MemberService, clock *Clock) *Session {
+func NewSession(store Store, bookings *cowbook.BookingService, members *cowbook.MemberService, clock *Clock) *Session {
 	s := &Session{store: store, bookings: bookings, members: members, clock: clock}
 	// s.as and the others are method values: functions with s already bound.
 	s.commands = map[string]command{
@@ -71,7 +91,7 @@ func NewSession(store *memstore.Store, bookings *cowbook.BookingService, members
 		"help":    {"help", "list the commands", s.help},
 		"member":  {"member add <name> <email> | member delete <id> | member list", "add, delete or list members; delete cancels their bookings", s.member},
 		"quit":    {"quit", "end the session (end of input does too)", s.quit},
-		"space":   {"space add <name> <kind> <capacity> <max-length> [hours] [timezone] | space list", "add a space at location 1, or list spaces; hours like mon-fri/09:00-18:00,sat/10:00-14:00", s.space},
+		"space":   {"space add <name> <kind> <capacity> <max-length> [hours] [timezone] | space list", "add a space at its timezone's location, or list spaces; hours like mon-fri/09:00-18:00,sat/10:00-14:00", s.space},
 	}
 	return s
 }

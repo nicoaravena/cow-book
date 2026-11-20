@@ -40,36 +40,90 @@ type storedSpace struct {
 // A Store must not be copied after first use, because copying a Mutex copies
 // its locked state. go vet reports such copies.
 type Store struct {
-	mu       sync.Mutex
-	spaces   map[int64]storedSpace
-	members  map[int64]cowbook.Member
-	bookings map[int64]cowbook.Booking
-	lastID   int64 // the last booking ID handed out
+	mu        sync.Mutex
+	locations map[int64]*time.Location // each location's timezone
+	spaces    map[int64]storedSpace
+	members   map[int64]cowbook.Member
+	bookings  map[int64]cowbook.Booking
+
+	// The last ID handed out of each kind, as a Postgres identity column.
+	lastLocationID, lastSpaceID, lastMemberID, lastBookingID int64
 }
 
 // New returns an empty Store.
 func New() *Store {
 	return &Store{
-		spaces:   make(map[int64]storedSpace),
-		members:  make(map[int64]cowbook.Member),
-		bookings: make(map[int64]cowbook.Booking),
+		locations: make(map[int64]*time.Location),
+		spaces:    make(map[int64]storedSpace),
+		members:   make(map[int64]cowbook.Member),
+		bookings:  make(map[int64]cowbook.Booking),
 	}
 }
 
-// AddSpace stores sp under sp.ID, with loc as its location's timezone. Spaces
-// have no service yet, so the caller picks the ID.
-func (s *Store) AddSpace(sp cowbook.Space, loc *time.Location) {
+// LocationFor returns the ID of the location in timezone tz, adding one if
+// there is none yet. Locations have no other data until 3.7, so a timezone
+// stands for one. Zones compare by name, as two loads of Europe/Madrid are
+// different pointers.
+func (s *Store) LocationFor(ctx context.Context, tz *time.Location) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.spaces[sp.ID] = storedSpace{space: sp, loc: loc}
+
+	// Map order is random, so take the lowest ID, as Postgres does.
+	var found int64
+	for id, loc := range s.locations {
+		if loc.String() == tz.String() && (found == 0 || id < found) {
+			found = id
+		}
+	}
+	if found != 0 {
+		return found, nil
+	}
+	s.lastLocationID++
+	s.locations[s.lastLocationID] = tz
+	return s.lastLocationID, nil
 }
 
-// AddMember stores m under m.ID. Members have no create service yet, so the
-// caller picks the ID.
-func (s *Store) AddMember(m cowbook.Member) {
+// CreateSpace stores sp with the next ID and returns it with the ID set. It
+// returns cowbook.ErrInvalidLocation if there is no location sp.LocationID().
+func (s *Store) CreateSpace(ctx context.Context, sp cowbook.Space) (cowbook.Space, error) {
+	if err := ctx.Err(); err != nil {
+		return cowbook.Space{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	loc, ok := s.locations[sp.LocationID()]
+	if !ok {
+		return cowbook.Space{}, cowbook.ErrInvalidLocation
+	}
+	s.lastSpaceID++
+	sp.ID = s.lastSpaceID
+	s.spaces[sp.ID] = storedSpace{space: sp, loc: loc}
+	return sp, nil
+}
+
+// CreateMember stores m with the next ID and returns it with the ID set. It
+// returns cowbook.ErrEmailTaken if a member who isn't deleted has m's email,
+// as the partial unique index does in Postgres.
+func (s *Store) CreateMember(ctx context.Context, m cowbook.Member) (cowbook.Member, error) {
+	if err := ctx.Err(); err != nil {
+		return cowbook.Member{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, other := range s.members {
+		if other.Email() == m.Email() && !other.Deleted() {
+			return cowbook.Member{}, cowbook.ErrEmailTaken
+		}
+	}
+	s.lastMemberID++
+	m.ID = s.lastMemberID
 	s.members[m.ID] = m
+	return m, nil
 }
 
 // overlaps reports whether a and b share any moment. A booking does not
@@ -94,8 +148,8 @@ func (s *Store) CreateBooking(ctx context.Context, b cowbook.Booking) (cowbook.B
 		}
 	}
 
-	s.lastID++
-	b.ID = s.lastID
+	s.lastBookingID++
+	b.ID = s.lastBookingID
 	s.bookings[b.ID] = b
 	return b, nil
 }

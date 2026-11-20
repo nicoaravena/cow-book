@@ -11,6 +11,33 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createMember = `-- name: CreateMember :one
+INSERT INTO members (name, email, created_at, updated_at) VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateMemberParams struct {
+	Name      string
+	Email     string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+// CreateMember adds a member and returns its id. The timestamps come from the
+// caller, as in CreateSpace. members_email_key refuses it with 23505 if a
+// member who isn't deleted has the email.
+func (q *Queries) CreateMember(ctx context.Context, arg CreateMemberParams) (int64, error) {
+	row := q.db.QueryRow(ctx, createMember,
+		arg.Name,
+		arg.Email,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const deleteMember = `-- name: DeleteMember :execrows
 UPDATE members
 SET deleted_at = $1, updated_at = $2
@@ -54,6 +81,38 @@ func (q *Queries) GetMember(ctx context.Context, id int64) (Member, error) {
 		&i.DeletedAt,
 	)
 	return i, err
+}
+
+const listMembers = `-- name: ListMembers :many
+SELECT id, name, email, created_at, updated_at, deleted_at FROM members ORDER BY id
+`
+
+// ListMembers returns every member, deleted ones included.
+func (q *Queries) ListMembers(ctx context.Context) ([]Member, error) {
+	rows, err := q.db.Query(ctx, listMembers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Member
+	for rows.Next() {
+		var i Member
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockMember = `-- name: LockMember :one

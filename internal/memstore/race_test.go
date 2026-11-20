@@ -76,7 +76,7 @@ func TestRaceForOneSlot(t *testing.T) {
 
 	errs := race(racers, func(i int) error {
 		id := int64(i + 1)
-		_, err := bookings.Book(context.Background(), cowbook.MemberActor(id), 7, slot(id))
+		_, err := bookings.Book(context.Background(), cowbook.MemberActor(id), 1, slot(id))
 		return err
 	})
 
@@ -87,13 +87,13 @@ func TestRaceForAPendingBookingsSlot(t *testing.T) {
 	store := newStore(t, racers)
 	bookings, _ := services(store)
 	ctx := context.Background()
-	if _, err := bookings.Book(ctx, cowbook.FrontDeskActor(9, []int64{1}), 7, slot(1)); err != nil {
+	if _, err := bookings.Book(ctx, cowbook.FrontDeskActor(9, []int64{1}), 1, slot(1)); err != nil {
 		t.Fatalf("staff Book() error = %v, want nil", err)
 	}
 
 	errs := race(racers, func(i int) error {
 		id := int64(i + 1)
-		_, err := bookings.Book(ctx, cowbook.MemberActor(id), 7, slot(id))
+		_, err := bookings.Book(ctx, cowbook.MemberActor(id), 1, slot(id))
 		return err
 	})
 
@@ -104,7 +104,7 @@ func TestRaceToApprove(t *testing.T) {
 	store := newStore(t, 1)
 	bookings, _ := services(store)
 	ctx := context.Background()
-	pending, err := bookings.Book(ctx, cowbook.AdminActor(9), 7, slot(1))
+	pending, err := bookings.Book(ctx, cowbook.AdminActor(9), 1, slot(1))
 	if err != nil {
 		t.Fatalf("staff Book() error = %v, want nil", err)
 	}
@@ -128,7 +128,7 @@ func TestApproveRacingCancel(t *testing.T) {
 		store := newStore(t, 1)
 		bookings, _ := services(store)
 		ctx := context.Background()
-		pending, err := bookings.Book(ctx, cowbook.AdminActor(9), 7, slot(1))
+		pending, err := bookings.Book(ctx, cowbook.AdminActor(9), 1, slot(1))
 		if err != nil {
 			t.Fatalf("staff Book() error = %v, want nil", err)
 		}
@@ -163,9 +163,9 @@ func TestRaceToDeleteMember(t *testing.T) {
 		spaceID int64
 		p       cowbook.BookingParams
 	}{
-		{cowbook.MemberActor(1), 7, slot(1)},
-		{cowbook.MemberActor(1), 8, slot(1)},
-		{cowbook.AdminActor(9), 7, cowbook.BookingParams{MemberID: 1, Attendees: 1, Start: at(12), End: at(13)}},
+		{cowbook.MemberActor(1), 1, slot(1)},
+		{cowbook.MemberActor(1), 2, slot(1)},
+		{cowbook.AdminActor(9), 1, cowbook.BookingParams{MemberID: 1, Attendees: 1, Start: at(12), End: at(13)}},
 	} {
 		if _, err := bookings.Book(ctx, b.actor, b.spaceID, b.p); err != nil {
 			t.Fatalf("Book() error = %v, want nil", err)
@@ -188,7 +188,7 @@ func TestRaceToDeleteMember(t *testing.T) {
 	if len(left) != 0 {
 		t.Errorf("member 1 has %d active bookings, want 0", len(left))
 	}
-	if _, err := bookings.Book(ctx, cowbook.MemberActor(2), 7, slot(2)); err != nil {
+	if _, err := bookings.Book(ctx, cowbook.MemberActor(2), 1, slot(2)); err != nil {
 		t.Errorf("Book() of the freed slot error = %v, want nil", err)
 	}
 }

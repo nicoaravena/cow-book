@@ -16,7 +16,7 @@ in 3.5. It isn't in the code, and 3.5 may change it:
 
 | Error | Kind | From |
 | --- | --- | --- |
-| `ErrInvalidLocation` | invalid | `NewSpace` |
+| `ErrInvalidLocation` | invalid | `NewSpace`; `CreateSpace` for an unknown location |
 | `ErrSpaceNameRequired` | invalid | `NewSpace` |
 | `ErrInvalidSpaceKind` | invalid | `NewSpace` |
 | `ErrInvalidCapacity` | invalid | `NewSpace` |
@@ -65,6 +65,10 @@ Declared in `cowbook/service.go`, returned by store implementations and passed o
 | `ErrBookingNotFound` | not found | `GetBooking`, `SaveCancellation`, `SaveApproval` |
 | `ErrSpaceNotFound` | not found | `GetSpace`; Postgres `CreateBooking` for a space deleted meanwhile |
 | `ErrMemberNotFound` | not found | `GetMember`, `SaveDeletion`; Postgres `CreateBooking` for a member removed meanwhile |
+| `ErrEmailTaken` | conflict | `CreateMember` (2.7); in Postgres, `23505` from `members_email_key` |
+
+`internal/postgres` declares one of its own: `ErrTenantNotFound` (not found), from `LookupTenant`
+when no tenant has the slug (2.7). It is wrapped with the slug.
 
 Stores may also return `ctx.Err()` (`context.Canceled`, `context.DeadlineExceeded`) when the
 caller's context is done, and, in M2, database errors that aren't any of the above.

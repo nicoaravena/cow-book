@@ -45,3 +45,17 @@ func (q *Queries) GetLocation(ctx context.Context, id int64) (GetLocationRow, er
 	err := row.Scan(&i.ID, &i.Name, &i.Timezone)
 	return i, err
 }
+
+const getLocationByTimezone = `-- name: GetLocationByTimezone :one
+SELECT id FROM locations WHERE timezone = $1 ORDER BY id LIMIT 1
+`
+
+// GetLocationByTimezone returns the first location in the timezone, or
+// pgx.ErrNoRows if there is none. Nothing stops two locations sharing a zone,
+// so the lowest id wins.
+func (q *Queries) GetLocationByTimezone(ctx context.Context, timezone string) (int64, error) {
+	row := q.db.QueryRow(ctx, getLocationByTimezone, timezone)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}

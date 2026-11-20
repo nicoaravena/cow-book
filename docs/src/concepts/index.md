@@ -12,10 +12,10 @@ Each topic links to the steps where it shows up.
 | Check constraints, named constraints | [2.1](2.1-postgres-and-migrations.md#the-databases-own-rules) |
 | Closures, for transaction scope | [2.4](2.4-sqlc-and-withtenant.md#closures-for-transaction-scope) |
 | Closing a channel to release many goroutines | [1.8](1.8-in-memory-store.md#goroutines) |
-| Compile-time interface checks (`var _ I = (*T)(nil)`) | [1.8](1.8-in-memory-store.md#compile-time-interface-checks), [2.4b](2.4b-space-store.md#a-store-bound-to-one-tenant) |
+| Compile-time interface checks (`var _ I = (*T)(nil)`) | [1.8](1.8-in-memory-store.md#compile-time-interface-checks), [2.4b](2.4b-space-store.md#a-store-bound-to-one-tenant), [2.7](2.7-repl-on-postgres.md#struct-embedding-three-stores-as-one-value) |
 | Compose, volumes, healthchecks | [2.1](2.1-postgres-and-migrations.md#compose) |
 | Connection pools (`pgxpool`), reused connections | [2.4](2.4-sqlc-and-withtenant.md#a-pool-and-why-connections-get-reused) |
-| Composition root (`main` wires dependencies) | [1.9](1.9-repl.md#a-delivery-adapter) |
+| Composition root (`main` wires dependencies) | [1.9](1.9-repl.md#a-delivery-adapter), [2.7](2.7-repl-on-postgres.md#interfaces-made-of-interfaces) |
 | Constructors (`NewX`) and params structs | [1.1](1.1-space.md#constructors) |
 | `context.Context` | [1.5](1.5-services-and-stores.md#contextcontext) |
 | `context.WithoutCancel` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure), [2.4](2.4-sqlc-and-withtenant.md#defer-and-rolling-back) |
@@ -29,13 +29,16 @@ Each topic links to the steps where it shows up.
 | Durations (`time.Duration`) | [1.2](1.2-opening-hours.md#durations) |
 | Email validation (`net/mail`) | [1.4](1.4-members-and-actors.md#validating-emails) |
 | `embed` and `fs.Sub` | [2.2](2.2-tenant-schemas.md#embedding-files-with-embed) |
-| Embedded structs, promoted fields | [2.4b](2.4b-space-store.md#embedded-structs), [2.5](2.5-booking-store.md#rebuilding-without-the-constructor) |
+| Embedded structs, promoted fields and methods | [2.4b](2.4b-space-store.md#embedded-structs), [2.5](2.5-booking-store.md#rebuilding-without-the-constructor), [2.7](2.7-repl-on-postgres.md#struct-embedding-three-stores-as-one-value) |
+| Embedding interfaces in interfaces | [2.7](2.7-repl-on-postgres.md#interfaces-made-of-interfaces) |
 | `.env` and `.env.example` | [2.1](2.1-postgres-and-migrations.md#env-and-envexample) |
-| `errors.As`, `pgconn.PgError` | [2.2](2.2-tenant-schemas.md#checking-which-constraint-refused-a-row), [2.3](2.3-bookings.md#exclusion-constraints), [2.4b](2.4b-space-store.md#foreign-key-errors), [2.5](2.5-booking-store.md#one-error-several-meanings-errorsas-and-a-switch) |
+| `errors.As`, `pgconn.PgError` | [2.2](2.2-tenant-schemas.md#checking-which-constraint-refused-a-row), [2.3](2.3-bookings.md#exclusion-constraints), [2.4b](2.4b-space-store.md#foreign-key-errors), [2.5](2.5-booking-store.md#one-error-several-meanings-errorsas-and-a-switch), [2.7](2.7-repl-on-postgres.md#creating-members-and-a-taken-email) (unique index) |
 | `errors.Is` | [1.3](1.3-booking-rules.md#errorsis), [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
 | `errors.Join` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
 | Exclusion constraints, GiST, `btree_gist` | [2.3](2.3-bookings.md#exclusion-constraints) |
+| Exit codes for a CLI | [2.7](2.7-repl-on-postgres.md#flags-for-one-subcommand-flagnewflagset) |
 | Exported vs unexported names | [1.1](1.1-space.md#exported-and-unexported-names) |
+| `flag`, `flag.NewFlagSet` per subcommand | [2.7](2.7-repl-on-postgres.md#flags-for-one-subcommand-flagnewflagset) |
 | `fstest.MapFS` | [2.2](2.2-tenant-schemas.md#faking-a-file-system-with-fstestmapfs) |
 | Functions as values | [1.5](1.5-services-and-stores.md#dependency-injection-including-the-clock) |
 | Generated code (sqlc, `DO NOT EDIT`) | [2.4](2.4-sqlc-and-withtenant.md#generated-code-with-sqlc) |
@@ -45,6 +48,7 @@ Each topic links to the steps where it shows up.
 | Guarded `UPDATE`, `:execrows`, `RowsAffected` | [2.5](2.5-booking-store.md#checking-and-writing-in-one-statement), [2.6](2.6-cancel-and-delete.md#cancelling-one-more-guarded-update) |
 | Identity columns, sequence gaps | [2.1](2.1-postgres-and-migrations.md#identity-columns) |
 | Implicit interfaces | [1.5](1.5-services-and-stores.md#implicit-interfaces) |
+| Interfaces defined by the consumer | [1.5](1.5-services-and-stores.md#implicit-interfaces), [2.7](2.7-repl-on-postgres.md#interfaces-defined-by-the-consumer) |
 | Instants vs wall-clock time, `Time.In` | [1.2](1.2-opening-hours.md#instants-vs-wall-clock) |
 | Integer conversions (`int32(x)`), wrap-around | [2.4b](2.4b-space-store.md#mapping-rows-to-domain-types) |
 | Isolation levels, READ COMMITTED re-checks, row locks | [2.5](2.5-booking-store.md#many-at-once), [2.6](2.6-cancel-and-delete.md#what-the-waiting-side-sees) |
@@ -63,7 +67,7 @@ Each topic links to the steps where it shows up.
 | Modules, packages, `go.mod` | [0.1](0.1-foundation.md#modules-and-packages) |
 | N+1 queries, grouping rows with a map | [2.4b](2.4b-space-store.md#two-queries-not-one-per-space) |
 | `NULL` vs Go zero values | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#null-and-gos-zero-time), [2.4b](2.4b-space-store.md#mapping-rows-to-domain-types), [2.5](2.5-booking-store.md#rebuilding-without-the-constructor) |
-| Partial unique indexes and constraints | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#a-partial-constraint-and-why-now-cant-be-in-it) |
+| Partial unique indexes and constraints | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#a-partial-constraint-and-why-now-cant-be-in-it), [2.7](2.7-repl-on-postgres.md#creating-members-and-a-taken-email) |
 | `pgx.Identifier`, SQL names vs parameters | [2.2](2.2-tenant-schemas.md#building-sql-names-safely-pgxidentifier) |
 | pgx query exec modes, stale prepared plans | [2.4](2.4-sqlc-and-withtenant.md#query-exec-modes-and-stale-plans) |
 | Pointer vs value receivers | [1.4](1.4-members-and-actors.md#pointer-vs-value-receivers) |

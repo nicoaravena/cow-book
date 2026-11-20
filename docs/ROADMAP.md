@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally with `cowbook serve`.
 
-**Next up:** step 2.7.
+**Next up:** step 3.1.
 
 ## How to work
 
@@ -53,7 +53,7 @@ Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for
 - [x] **2.4b** Space store: a `cowbook` function that rebuilds a `Space` from stored values, and accessors for its location, hours, availability and timestamps. `GetSpace` with its location's timezone and opening windows, plus create and list, all through `WithTenant`. Integration tests. *Go: mapping rows to domain types.*
 - [x] **2.5** Booking store: `23P01` maps to `ErrSlotTaken`. Same contract tests as the in-memory store, then many goroutines racing for one slot. Lazy expiry: in the same transaction, `CreateBooking` first cancels lapsed pending bookings that overlap the new one, because a constraint can't use `now()`; approving checks the deadline the same way. *Go: `errors.As`, subtests, shared test helpers.* Has `CreateBooking`, `GetBooking` and `SaveApproval`; `SaveCancellation` and `ListMemberBookingsEndingAfter` move to 2.6.
 - [x] **2.6** Cancel in a transaction (`SaveCancellation`, and `ListMemberBookingsEndingAfter` for deletion), so `postgres.BookingStore` meets `cowbook.BookingStore`; the slot is bookable again. Member deletion in one transaction: mark the member deleted and cancel their bookings. A booking insert refuses a member deleted at the same moment (lock the member row, or insert only while the member isn't deleted), proven by a test. *Go: transactions spanning several queries.* Done with a member store holding `GetMember` and `SaveDeletion`, and `RestoreMember`; the member row's lock is what both sides wait on.
-- [ ] **2.7** Creating and listing members in Postgres (2.6 brings `GetMember` and `SaveDeletion`), and `cowbook repl -store=postgres -tenant=<slug>`: the REPL over the three Postgres stores, so data survives a restart. The slug is looked up in `platform.tenants`. The REPL's session stops holding `*memstore.Store` and takes a small interface both stores meet. *Go: interfaces defined by the consumer.*
+- [x] **2.7** Creating and listing members in Postgres (2.6 brings `GetMember` and `SaveDeletion`), and `cowbook repl -store=postgres -tenant=<slug>`: the REPL over the three Postgres stores, so data survives a restart. The slug is looked up in `platform.tenants`. The REPL's session stops holding `*memstore.Store` and takes a small interface both stores meet. *Go: interfaces defined by the consumer.* Also brought: `ListBookings` in Postgres, a location per timezone (`LocationFor`), `postgres.Stores` by struct embedding, `ErrEmailTaken`, and `flag.NewFlagSet` for `repl` only.
 
 ### M3: HTTP API
 
@@ -147,6 +147,8 @@ Decided by the user:
 - **`create-tenant` early (2.2):** brought forward from 3.2 as 2.2's runnable result.
 - **2.4 split (2.4):** the plumbing (sqlc, pool, `WithTenant`) stays 2.4, the space store becomes its own step, so each stays reviewable.
 - **REPL on Postgres at M2's end (2.4):** `cowbook repl -store=postgres` waits for 2.7, when spaces, members and bookings are all in Postgres, rather than mixing stores.
+- **A location per timezone (2.7):** `space add ... [timezone]` keeps its syntax; both stores get `LocationFor(ctx, tz)`, which finds the tenant's location in that zone or adds one named after it. Rejected: a `location add` command (part of 3.7 brought forward, and a syntax change) and Postgres-only location 1 (the two modes would differ). 3.7 replaces it.
+- **Fixed REPL clock in both modes (2.7):** Postgres mode also starts at Mon 2026-11-16 08:00 UTC, so the modes behave the same. Rejected: the wall clock in Postgres mode.
 - **Contract tests ported, not shared (2.5):** memstore's booking tests are copied into `internal/postgres` with the same names, rather than moved into a shared suite package both stores run. Cost: two copies that can drift.
 - **No lazy expiry in memstore (2.5):** the in-memory store keeps a lapsed booking's slot held; only Postgres expires it.
 
@@ -210,6 +212,12 @@ Agent's calls, open to rejection:
 - **`ErrMemberDeleted` from `CreateBooking` in Postgres only (2.6):** the `cowbook.BookingStore` contract doesn't promise it, and memstore keeps its simpler behavior.
 - **`RestoreMember` goes through `NewMember` (2.6):** as `RestoreSpace` does; `MemberRecord` embeds `MemberParams`.
 - **Ordering tests hold a transaction (2.6):** besides races, two tests hold one side's lock in a test transaction, wait until `pg_blocking_pids` shows the store's call waiting, then commit, so both orders of booking and deleting are tested every run.
+- **`repl.Store` in the REPL package (2.7):** the session declares the seven calls its commands make (`LocationFor`, `CreateSpace`, `GetSpace`, the three lists, `CreateMember`), and both stores meet it without naming it. Changes still go through the services.
+- **`postgres.Stores` embeds the three stores (2.7):** one value with every method, which meets the `cowbook` interfaces and `repl.Store`. It lives in `postgres`, not `main` as first planned, so the REPL's integration test builds the same thing; M3 can use it per request.
+- **IDs from the store in memory too (2.7):** `memstore.CreateSpace` and `CreateMember` replace `AddSpace` and `AddMember`, where the caller picked the ID; mixing both would collide. The memstore tests' spaces are now 1 and 2, not 7 and 8.
+- **`ErrEmailTaken` in `cowbook` (2.7):** a store error beside `ErrMemberNotFound`. Postgres maps `23505` on `members_email_key`; memstore checks under its mutex. The REPL calls `NewMember` then the store, as for spaces; a `MemberService.Create` waits for 3.7.
+- **`LookupTenant` opens `active` tenants only (2.7):** a `provisioning` one may have no schema, a `suspended` one must stay blocked. `ErrTenantNotFound` lives in `postgres`, since there is no `Tenant` domain type yet.
+- **`flag` for `repl` now (2.7):** `flag.NewFlagSet("repl", ContinueOnError)`; bad flags exit 2, `-h` exits 0. The `switch` on `os.Args[1]` and the other subcommands move in 3.2.
 
 ## How each README rule is enforced
 
@@ -323,4 +331,6 @@ Already added: `staticcheck`, goose (v3.29.0) and sqlc (v1.31.1), as `go tool` e
 - **Lapsed bookings stay uncancelled until needed:** lazy expiry runs only when a new booking overlaps one. Until then the row looks active, so availability (3.4) and listings (3.6) must use `State(now)`, not `cancelled_at`, to show the slot free.
 - **One more statement per booking:** since 2.6 `CreateBooking` reads and share-locks the member row first. Bookings of one member don't wait for each other; they wait only for that member's deletion.
 - **Exclusion constraint under contention:** Postgres checks the constraint after adding the index entry, so two conflicting inserts can in principle wait on each other and one end with a deadlock error (`40P01`) instead of `23P01`. Not seen in 120 runs of the 2.5 race tests on a 16-connection pool. If it appears, `CreateBooking` should retry the transaction once.
+- **REPL clock after a restart (2.7):** with `-store=postgres` the data stays but the clock starts again at 16 November 08:00. A booking made after `clock add 48h` is in the future again, and the next run's `clock add` may put earlier bookings in the past. `clock set` gets back. Decided by the user over the wall clock.
+- **`LocationFor` is REPL-only (2.7):** a find-or-create by timezone in both stores, for `space add`. Two sessions adding a new zone at once can both insert a row; harmless, since the lowest id wins. 3.7 replaces it with location management.
 - **Staff booking that starts right away:** its approval deadline is its start, which is now, so it can never be approved. It holds the slot until lazy expiry cancels it. Refusing staff bookings that start within some minimum lead time would fix it.

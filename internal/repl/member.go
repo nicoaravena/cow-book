@@ -13,7 +13,7 @@ import (
 func (s *Session) member(ctx context.Context, args []string) (string, error) {
 	switch {
 	case len(args) == 3 && args[0] == "add":
-		return s.memberAdd(args[1], args[2])
+		return s.memberAdd(ctx, args[1], args[2])
 	case len(args) == 2 && args[0] == "delete":
 		return s.memberDelete(ctx, args[1])
 	case len(args) == 1 && args[0] == "list":
@@ -22,14 +22,14 @@ func (s *Session) member(ctx context.Context, args []string) (string, error) {
 	return "", errUsage
 }
 
-func (s *Session) memberAdd(name, email string) (string, error) {
+func (s *Session) memberAdd(ctx context.Context, name, email string) (string, error) {
 	m, err := cowbook.NewMember(cowbook.MemberParams{Name: name, Email: email}, s.clock.Now())
 	if err != nil {
 		return "", err
 	}
-	s.lastMemberID++
-	m.ID = s.lastMemberID
-	s.store.AddMember(m)
+	if m, err = s.store.CreateMember(ctx, m); err != nil {
+		return "", err
+	}
 	return fmt.Sprintf("ok member #%d", m.ID), nil
 }
 

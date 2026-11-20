@@ -59,7 +59,7 @@ func newBookingFixture(t *testing.T, n int) *bookingFixture {
 		}
 	}
 
-	// MemberStore can't create members until 2.7, so plain SQL. generate_series gives one row
+	// Plain SQL, so n members take one statement. generate_series gives one row
 	// per number, and the emails differ because the table wants them unique.
 	rows, err := pool.Query(t.Context(),
 		"INSERT INTO "+f.schema()+".members (name, email)"+
@@ -526,5 +526,25 @@ func TestBookingStoreRefusesDeletedMember(t *testing.T) {
 
 	if _, err := f.store.CreateBooking(t.Context(), b); !errors.Is(err, cowbook.ErrMemberDeleted) {
 		t.Errorf("CreateBooking error = %v, want %v", err, cowbook.ErrMemberDeleted)
+	}
+}
+
+// internal/memstore's list test, for bookings: every booking, cancelled ones
+// included, by ID.
+func TestBookingStoreList(t *testing.T) {
+	f := newBookingFixture(t, 1)
+	m := f.members[0]
+	var want []cowbook.Booking
+	for _, hour := range []int{14, 10, 12} {
+		want = append(want, f.create(t, f.newBooking(t, cowbook.MemberActor(m), 0, m, hour, hour+1, bookingNow)))
+	}
+	want[1] = f.cancel(t, want[1], cowbook.MemberActor(m), bookingNow)
+
+	got, err := f.store.ListBookings(t.Context())
+	if err != nil || len(got) != len(want) {
+		t.Fatalf("ListBookings = %d bookings, %v; want %d, nil", len(got), err, len(want))
+	}
+	for i := range want {
+		checkSameBooking(t, got[i], want[i])
 	}
 }

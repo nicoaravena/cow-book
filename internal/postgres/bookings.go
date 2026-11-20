@@ -129,6 +129,30 @@ func (s *BookingStore) GetBooking(ctx context.Context, id int64) (cowbook.Bookin
 	return bookingFromRow(row)
 }
 
+// ListBookings returns every booking of the tenant, cancelled ones included,
+// sorted by ID. Like GetBooking, a lapsed pending booking comes back as
+// stored; its State says it has expired.
+func (s *BookingStore) ListBookings(ctx context.Context) ([]cowbook.Booking, error) {
+	var rows []tenantdb.Booking
+	err := WithTenant(ctx, s.pool, s.tenantID, func(q *tenantdb.Queries) error {
+		var err error
+		rows, err = q.ListBookings(ctx)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	bookings := make([]cowbook.Booking, 0, len(rows))
+	for _, row := range rows {
+		b, err := bookingFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		bookings = append(bookings, b)
+	}
+	return bookings, nil
+}
+
 // SaveCancellation stores the cancellation of a booking that Cancel has
 // changed. It writes only cancelled_at and updated_at, and only while the
 // stored booking isn't cancelled: the check and the write are one UPDATE, so

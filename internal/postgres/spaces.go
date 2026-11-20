@@ -141,6 +141,27 @@ func (s *SpaceStore) ListSpaces(ctx context.Context) ([]cowbook.Space, error) {
 	return spaces, nil
 }
 
+// LocationFor returns the ID of the tenant's location in timezone tz, adding
+// one named after the zone if there is none, in one transaction. It stands in
+// for location management until 3.7, so the REPL can keep a timezone per
+// space. Two sessions adding the same zone at once can both add a row; that is
+// harmless, as GetLocationByTimezone takes the lowest id.
+func (s *SpaceStore) LocationFor(ctx context.Context, tz *time.Location) (int64, error) {
+	var id int64
+	err := WithTenant(ctx, s.pool, s.tenantID, func(q *tenantdb.Queries) error {
+		var err error
+		id, err = q.GetLocationByTimezone(ctx, tz.String())
+		if errors.Is(err, pgx.ErrNoRows) {
+			id, err = q.CreateLocation(ctx, tenantdb.CreateLocationParams{Name: tz.String(), Timezone: tz.String()})
+		}
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // spaceFromRow rebuilds a cowbook.Space from its row and its opening windows.
 // The domain checks the values again, so a row someone changed by hand into
 // something NewSpace would refuse comes back as an error.

@@ -192,6 +192,46 @@ func (q *Queries) GetBooking(ctx context.Context, id int64) (Booking, error) {
 	return i, err
 }
 
+const listBookings = `-- name: ListBookings :many
+SELECT id, space_id, member_id, booked_by, attendees, starts_at, ends_at, approval_deadline, approved_at, cancelled_at, created_at, updated_at FROM bookings ORDER BY id
+`
+
+// ListBookings returns every booking, cancelled ones included. A lapsed
+// pending booking stays uncancelled until lazy expiry reaches it, so callers
+// read its state with Booking.State.
+func (q *Queries) ListBookings(ctx context.Context) ([]Booking, error) {
+	rows, err := q.db.Query(ctx, listBookings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Booking
+	for rows.Next() {
+		var i Booking
+		if err := rows.Scan(
+			&i.ID,
+			&i.SpaceID,
+			&i.MemberID,
+			&i.BookedBy,
+			&i.Attendees,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.ApprovalDeadline,
+			&i.ApprovedAt,
+			&i.CancelledAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMemberBookingsEndingAfter = `-- name: ListMemberBookingsEndingAfter :many
 SELECT id, space_id, member_id, booked_by, attendees, starts_at, ends_at, approval_deadline, approved_at, cancelled_at, created_at, updated_at FROM bookings
 WHERE member_id = $1

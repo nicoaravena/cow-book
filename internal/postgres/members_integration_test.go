@@ -173,3 +173,50 @@ func TestMemberServiceDeleteOverPostgres(t *testing.T) {
 		})
 	}
 }
+
+// internal/memstore's TestCreateMember, ported, plus the list: emails are
+// unique among members who aren't deleted.
+func TestMemberStoreCreateAndList(t *testing.T) {
+	pool := testPool(t)
+	store := NewMemberStore(pool, createTestTenant(t, pool))
+	newMember := func(email string) cowbook.Member {
+		m, err := cowbook.NewMember(cowbook.MemberParams{Name: "Ana", Email: email}, bookingNow)
+		if err != nil {
+			t.Fatalf("NewMember: %v", err)
+		}
+		return m
+	}
+
+	first, err := store.CreateMember(t.Context(), newMember("ana@example.com"))
+	if err != nil || first.ID == 0 {
+		t.Fatalf("CreateMember = member %d, %v; want an ID, nil", first.ID, err)
+	}
+	got, err := store.GetMember(t.Context(), first.ID)
+	if err != nil || got.Name() != "Ana" || got.Email() != "ana@example.com" || !got.CreatedAt().Equal(bookingNow) {
+		t.Errorf("GetMember = %q, %q, created %v, %v; want Ana, ana@example.com, created %v, nil",
+			got.Name(), got.Email(), got.CreatedAt(), err, bookingNow)
+	}
+	if _, err := store.CreateMember(t.Context(), newMember("ANA@example.com")); !errors.Is(err, cowbook.ErrEmailTaken) {
+		t.Errorf("taken email: CreateMember error = %v, want %v", err, cowbook.ErrEmailTaken)
+	}
+
+	deleted := first
+	if err := deleted.Delete(bookingNow.Add(time.Hour)); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if err := store.SaveDeletion(t.Context(), deleted, nil); err != nil {
+		t.Fatalf("SaveDeletion: %v", err)
+	}
+	second, err := store.CreateMember(t.Context(), newMember("ana@example.com"))
+	if err != nil || second.ID <= first.ID {
+		t.Fatalf("deleted member's email: CreateMember = member %d, %v; want a later ID, nil", second.ID, err)
+	}
+
+	members, err := store.ListMembers(t.Context())
+	if err != nil || len(members) != 2 || members[0].ID != first.ID || members[1].ID != second.ID {
+		t.Fatalf("ListMembers = %+v, %v; want members %d and %d", members, err, first.ID, second.ID)
+	}
+	if !members[0].Deleted() || members[1].Deleted() {
+		t.Errorf("ListMembers deleted = %v, %v; want true, false", members[0].Deleted(), members[1].Deleted())
+	}
+}

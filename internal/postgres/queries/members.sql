@@ -3,6 +3,17 @@
 -- tenant has no such member.
 SELECT * FROM members WHERE id = $1;
 
+-- name: CreateMember :one
+-- CreateMember adds a member and returns its id. The timestamps come from the
+-- caller, as in CreateSpace. members_email_key refuses it with 23505 if a
+-- member who isn't deleted has the email.
+INSERT INTO members (name, email, created_at, updated_at) VALUES ($1, $2, $3, $4)
+RETURNING id;
+
+-- name: ListMembers :many
+-- ListMembers returns every member, deleted ones included.
+SELECT * FROM members ORDER BY id;
+
 -- name: LockMember :one
 -- LockMember returns the member's deleted_at and keeps a share lock on the row
 -- until the transaction ends, so a deletion of the member waits for it. If a
