@@ -75,6 +75,22 @@ func (b Booking) Approved() bool { return !b.approvedAt.IsZero() }
 // is zero for a booking the member made themselves.
 func (b Booking) ApprovalDeadline() time.Time { return b.approvalDeadline }
 
+// BookedBy returns the ID of the staff member who made the booking, or 0 if
+// the member made it themselves.
+func (b Booking) BookedBy() int64 { return b.bookedBy }
+
+// ApprovedAt returns when the member approved the booking, or zero.
+func (b Booking) ApprovedAt() time.Time { return b.approvedAt }
+
+// CancelledAt returns when the booking was cancelled, or zero.
+func (b Booking) CancelledAt() time.Time { return b.cancelledAt }
+
+// CreatedAt returns when the booking was made.
+func (b Booking) CreatedAt() time.Time { return b.createdAt }
+
+// UpdatedAt returns when the booking last changed.
+func (b Booking) UpdatedAt() time.Time { return b.updatedAt }
+
 // BookingState is where a booking stands, for showing to people. The rules
 // read the timestamps, not this.
 type BookingState string
@@ -163,6 +179,52 @@ func NewBooking(actor Actor, space Space, loc *time.Location, p BookingParams, n
 		}
 	}
 	return b, nil
+}
+
+// BookingRecord holds a stored booking's values: the ones NewBooking takes,
+// plus those a store keeps. Zero times and a zero BookedBy stand for NULL.
+type BookingRecord struct {
+	ID      int64
+	SpaceID int64
+	BookingParams
+	BookedBy         int64
+	ApprovalDeadline time.Time
+	ApprovedAt       time.Time
+	CancelledAt      time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// RestoreBooking rebuilds a stored booking. Unlike RestoreSpace it can't go
+// through the constructor: NewBooking needs the actor and the space, and
+// refuses a start in the past, which a stored booking may well have. So it
+// checks the rules that hold for a booking forever, whoever made it and
+// whenever it is read.
+func RestoreBooking(r BookingRecord) (Booking, error) {
+	switch {
+	case r.MemberID <= 0:
+		return Booking{}, ErrInvalidMember
+	case r.SpaceID <= 0:
+		return Booking{}, ErrInvalidSpace
+	case r.Attendees < 1:
+		return Booking{}, ErrInvalidAttendees
+	case !r.Start.Before(r.End):
+		return Booking{}, ErrInvalidBookingTime
+	}
+	return Booking{
+		ID:               r.ID,
+		spaceID:          r.SpaceID,
+		memberID:         r.MemberID,
+		bookedBy:         r.BookedBy,
+		attendees:        r.Attendees,
+		start:            r.Start,
+		end:              r.End,
+		createdAt:        r.CreatedAt,
+		updatedAt:        r.UpdatedAt,
+		approvalDeadline: r.ApprovalDeadline,
+		approvedAt:       r.ApprovedAt,
+		cancelledAt:      r.CancelledAt,
+	}, nil
 }
 
 // Errors returned by Cancel. Callers compare them with errors.Is.

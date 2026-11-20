@@ -31,12 +31,12 @@ in 3.5. It isn't in the code, and 3.5 may change it:
 | Error | Kind | From |
 | --- | --- | --- |
 | `ErrBookNotAllowed` | forbidden | `NewBooking` |
-| `ErrInvalidMember` | invalid | `NewBooking` |
-| `ErrInvalidSpace` | invalid | `NewBooking` |
+| `ErrInvalidMember` | invalid | `NewBooking`, `RestoreBooking` |
+| `ErrInvalidSpace` | invalid | `NewBooking`, `RestoreBooking` |
 | `ErrSpaceUnavailable` | conflict | `NewBooking` |
-| `ErrInvalidAttendees` | invalid | `NewBooking` |
+| `ErrInvalidAttendees` | invalid | `NewBooking`, `RestoreBooking` |
 | `ErrOverCapacity` (wrapped) | invalid | `NewBooking` |
-| `ErrInvalidBookingTime` | invalid | `NewBooking` |
+| `ErrInvalidBookingTime` | invalid | `NewBooking`, `RestoreBooking` |
 | `ErrBookingInPast` | invalid | `NewBooking` |
 | `ErrBookingTooLong` (wrapped) | invalid | `NewBooking` |
 | `ErrOutsideOpeningHours` | invalid | `NewBooking` |
@@ -45,7 +45,7 @@ in 3.5. It isn't in the code, and 3.5 may change it:
 | `ErrBookingEnded` | conflict | `Booking.Cancel` |
 | `ErrApproveNotAllowed` | forbidden | `Booking.Approve` |
 | `ErrNotPending` | conflict | `Booking.Approve`, `SaveApproval` |
-| `ErrApprovalExpired` | conflict | `Booking.Approve` |
+| `ErrApprovalExpired` | conflict | `Booking.Approve`, `postgres.BookingStore.SaveApproval` |
 
 ## Member
 
@@ -61,10 +61,10 @@ Declared in `cowbook/service.go`, returned by store implementations and passed o
 
 | Error | Kind | From |
 | --- | --- | --- |
-| `ErrSlotTaken` | conflict | `CreateBooking` |
+| `ErrSlotTaken` | conflict | `CreateBooking`; in Postgres, `23P01` from `bookings_no_overlap` |
 | `ErrBookingNotFound` | not found | `GetBooking`, `SaveCancellation`, `SaveApproval` |
-| `ErrSpaceNotFound` | not found | `GetSpace` |
-| `ErrMemberNotFound` | not found | `GetMember`, `SaveDeletion` |
+| `ErrSpaceNotFound` | not found | `GetSpace`; Postgres `CreateBooking` for a space deleted meanwhile |
+| `ErrMemberNotFound` | not found | `GetMember`, `SaveDeletion`; Postgres `CreateBooking` for a member deleted meanwhile |
 
 Stores may also return `ctx.Err()` (`context.Canceled`, `context.DeadlineExceeded`) when the
 caller's context is done, and, in M2, database errors that aren't any of the above.

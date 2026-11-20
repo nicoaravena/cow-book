@@ -2,7 +2,7 @@
 
 Postgres 18, one database for every operator, one schema per operator. So far only
 `cowbook create-tenant` and the integration tests connect to it. Tenant work goes through
-`WithTenant` (2.4); `postgres.SpaceStore` (2.4b) is the first store that uses it.
+`WithTenant` (2.4); `postgres.SpaceStore` (2.4b) and `postgres.BookingStore` (2.5) use it.
 
 ## Running it locally
 
@@ -100,6 +100,10 @@ Queries live in `internal/postgres/queries/*.sql`, run with unqualified table na
 | `ListSpaces(ctx)` | Every space, by `id` |
 | `ListOpeningWindows(ctx, spaceID)` | One space's windows, by weekday and opening time |
 | `ListAllOpeningWindows(ctx)` | Every window, by space, weekday and opening time |
+| `CreateBooking(ctx, {...})` | The new booking's id. Takes every `bookings` column but `id`; a NULL column is an invalid `pgtype` value (2.5) |
+| `ExpireLapsedPending(ctx, {Now, SpaceID, StartsAt, EndsAt})` | Rows changed. Cancels at `Now` the space's bookings not cancelled or approved, with `approval_deadline <= Now`, overlapping `[StartsAt, EndsAt)` |
+| `GetBooking(ctx, id)` | The row as a `tenantdb.Booking`; `pgx.ErrNoRows` if there's no such booking |
+| `ApproveBooking(ctx, {ID, ApprovedAt, UpdatedAt})` | Rows changed, 1 or 0. Sets `approved_at` only if not cancelled, not approved, and `approval_deadline > ApprovedAt` |
 
 ## Tenant migrations
 
@@ -175,4 +179,6 @@ One booking of a space for a member. The rows of a `Booking`; a `NULL` here is a
 `bookings_no_overlap` is an exclusion constraint, `EXCLUDE USING gist (space_id WITH =,
 tstzrange(starts_at, ends_at) WITH &&) WHERE (cancelled_at IS NULL)`: no two bookings of one space
 overlap unless one is cancelled. Pending bookings count, even past their deadline. A refused
-insert has SQLSTATE `23P01`.
+insert has SQLSTATE `23P01`, which `postgres.BookingStore` turns into `ErrSlotTaken`. A lapsed
+pending booking keeps its slot until a new booking needs it: `ExpireLapsedPending` cancels it in
+the new booking's transaction (2.5).

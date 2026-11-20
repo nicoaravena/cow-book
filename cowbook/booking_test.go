@@ -677,3 +677,104 @@ func TestBookingState(t *testing.T) {
 		})
 	}
 }
+
+// recordOf returns b's values as a store would keep them.
+func recordOf(b Booking) BookingRecord {
+	return BookingRecord{
+		ID:      b.ID,
+		SpaceID: b.SpaceID(),
+		BookingParams: BookingParams{
+			MemberID:  b.MemberID(),
+			Attendees: b.Attendees(),
+			Start:     b.Start(),
+			End:       b.End(),
+		},
+		BookedBy:         b.BookedBy(),
+		ApprovalDeadline: b.ApprovalDeadline(),
+		ApprovedAt:       b.ApprovedAt(),
+		CancelledAt:      b.CancelledAt(),
+		CreatedAt:        b.CreatedAt(),
+		UpdatedAt:        b.UpdatedAt(),
+	}
+}
+
+// A booking read through its accessors and rebuilt is the same booking, every
+// timestamp included. Each case sets a different set of them.
+func TestRestoreBooking(t *testing.T) {
+	approve := func(b *Booking) error { return b.Approve(MemberActor(3), bookingNow.Add(time.Hour)) }
+	cancel := func(b *Booking) error { return b.Cancel(MemberActor(3), storedSpace(t), bookingNow.Add(2*time.Hour)) }
+
+	tests := []struct {
+		name    string
+		booking func(t *testing.T) Booking
+		changes []func(b *Booking) error
+	}{
+		{"member's own booking", cancellableBooking, nil},
+		{"pending staff booking", pendingBooking, nil},
+		{"approved, then cancelled", pendingBooking, []func(b *Booking) error{approve, cancel}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := tt.booking(t)
+			b.ID = 12
+			for _, change := range tt.changes {
+				if err := change(&b); err != nil {
+					t.Fatalf("change error = %v, want nil", err)
+				}
+			}
+
+			got, err := RestoreBooking(recordOf(b))
+			if err != nil {
+				t.Fatalf("RestoreBooking() error = %v, want nil", err)
+			}
+			if got != b {
+				t.Errorf("RestoreBooking() = %+v, want %+v", got, b)
+			}
+		})
+	}
+}
+
+func TestBookingTimestampAccessors(t *testing.T) {
+	b := pendingBooking(t)
+	approved, cancelled := bookingNow.Add(time.Hour), bookingNow.Add(2*time.Hour)
+	if err := b.Approve(MemberActor(3), approved); err != nil {
+		t.Fatalf("Approve() error = %v, want nil", err)
+	}
+	if err := b.Cancel(MemberActor(3), storedSpace(t), cancelled); err != nil {
+		t.Fatalf("Cancel() error = %v, want nil", err)
+	}
+
+	if b.BookedBy() == 0 {
+		t.Error("BookedBy() = 0, want the staff member's ID")
+	}
+	if !b.CreatedAt().Equal(bookingNow) || !b.ApprovedAt().Equal(approved) || !b.CancelledAt().Equal(cancelled) {
+		t.Errorf("CreatedAt(), ApprovedAt(), CancelledAt() = %v, %v, %v, want %v, %v, %v",
+			b.CreatedAt(), b.ApprovedAt(), b.CancelledAt(), bookingNow, approved, cancelled)
+	}
+	if !b.UpdatedAt().Equal(cancelled) {
+		t.Errorf("UpdatedAt() = %v, want the last change, %v", b.UpdatedAt(), cancelled)
+	}
+}
+
+func TestRestoreBookingValidates(t *testing.T) {
+	tests := []struct {
+		name   string
+		change func(r *BookingRecord)
+		want   error
+	}{
+		{"no member", func(r *BookingRecord) { r.MemberID = 0 }, ErrInvalidMember},
+		{"no space", func(r *BookingRecord) { r.SpaceID = 0 }, ErrInvalidSpace},
+		{"no attendees", func(r *BookingRecord) { r.Attendees = 0 }, ErrInvalidAttendees},
+		{"ends at its start", func(r *BookingRecord) { r.End = r.Start }, ErrInvalidBookingTime},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := recordOf(cancellableBooking(t))
+			tt.change(&r)
+			if _, err := RestoreBooking(r); !errors.Is(err, tt.want) {
+				t.Errorf("RestoreBooking() error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}

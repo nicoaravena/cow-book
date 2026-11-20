@@ -15,7 +15,7 @@ listed under **Loser gets**.
 | `CreateBooking(ctx, b)` | Stores `b`, returns it with its ID set | - | `ErrSlotTaken` if `b` overlaps a booking of the same space that isn't cancelled. Pending bookings hold their slot |
 | `GetBooking(ctx, id)` | Returns the booking | `ErrBookingNotFound` | - |
 | `SaveCancellation(ctx, b)` | Stores a booking `Cancel` changed | `ErrBookingNotFound` | `ErrAlreadyCancelled` |
-| `SaveApproval(ctx, b)` | Stores a booking `Approve` changed | `ErrBookingNotFound` | `ErrAlreadyCancelled` or `ErrNotPending` |
+| `SaveApproval(ctx, b)` | Stores a booking `Approve` changed | `ErrBookingNotFound` | `ErrAlreadyCancelled` or `ErrNotPending`; from Postgres also `ErrApprovalExpired` |
 | `ListMemberBookingsEndingAfter(ctx, memberID, t)` | The member's bookings that aren't cancelled and end after `t` | - | - |
 
 Bookings don't include their end: one ending at 10:00 and one starting at 10:00 don't overlap.
@@ -49,9 +49,10 @@ happen as one step.
   the interfaces above: no service needs them yet (1.10).
 - Every method returns `ctx.Err()` without doing anything if the context is already done.
 
-Differences from the Postgres store planned for M2:
+Differences from the Postgres store:
 
-- No lazy expiry: a pending booking past its approval deadline keeps holding its slot.
+- No lazy expiry: a pending booking past its approval deadline keeps holding its slot. Kept that
+  way on purpose (2.5).
 - `CreateBooking` doesn't refuse a member deleted at the same moment.
 - Saves replace the whole booking, so a cancel that read the booking before an approval was saved
   drops the approval time. The booking still ends cancelled.
@@ -70,8 +71,22 @@ tenant: `NewSpaceStore(pool, tenantID)`. It holds no connection, and every metho
 
 Rows are rebuilt with `RestoreSpace`, so a row that breaks a domain rule, such as a space left
 with no windows, is an error wrapping that rule's sentinel. Times come back cut to the
-microsecond (pgx drops the nanoseconds) and in `time.Local`; compare them with `Equal`. Bookings
-and members follow in 2.5 to 2.7.
+microsecond (pgx drops the nanoseconds) and in `time.Local`; compare them with `Equal`.
+
+`postgres.BookingStore` (2.5), in `internal/postgres/bookings.go`, does the same for bookings:
+`NewBookingStore(pool, tenantID)`. It has three of `BookingStore`'s five methods so far;
+`SaveCancellation` and `ListMemberBookingsEndingAfter` arrive in 2.6, and with them the
+compile-time interface check.
+
+| Method | Does | Errors |
+| --- | --- | --- |
+| `CreateBooking(ctx, b)` | In one transaction: cancels the space's pending bookings that overlap `b` and whose deadline has passed by `b.CreatedAt()` (lazy expiry), then inserts `b`. If the insert fails, the expiry rolls back with it | `ErrSlotTaken` (`23P01` on `bookings_no_overlap`); `ErrSpaceNotFound`, `ErrMemberNotFound` (`23503` on `bookings_space_id_fkey`, `bookings_member_id_fkey`) |
+| `GetBooking(ctx, id)` | The booking, rebuilt with `RestoreBooking`. A lapsed booking comes back as stored, not cancelled | `ErrBookingNotFound` |
+| `SaveApproval(ctx, b)` | Writes `approved_at` and `updated_at` only, in one `UPDATE` that matches only a booking still pending with its deadline after `b.ApprovedAt()` | `ErrBookingNotFound`; the loser gets `ErrAlreadyCancelled`, `ErrNotPending` or `ErrApprovalExpired` |
+
+The store's clock is the booking's: lazy expiry uses `b.CreatedAt()`, which `NewBooking` took
+from the service's injected clock, so `CreateBooking` needs no `now` of its own. Members follow
+in 2.6 and 2.7.
 
 ### Test fake
 
@@ -85,4 +100,5 @@ Fields are unexported, so stores read them through accessors: `Booking.SpaceID`,
 `Start`, `End`, `Cancelled`, `Approved`, and `Member.Deleted`. 1.10 adds `Booking.Attendees`,
 `Booking.State`, `Member.Name`, `Email` and `Space.Name`, `Kind`, `Capacity`, `MaxBookingLength`. 2.4b adds `Space.LocationID`,
 `Hours`, `Available`, `CreatedAt`, `UpdatedAt`, and `RestoreSpace` to rebuild a `Space` from a row.
-Rebuilding a `Booking` still needs a constructor, due in 2.5, and a `Member` in 2.6.
+2.5 adds `Booking.BookedBy`, `ApprovedAt`, `CancelledAt`, `CreatedAt`, `UpdatedAt` and
+`RestoreBooking`. Rebuilding a `Member` arrives in 2.6.

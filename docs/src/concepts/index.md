@@ -28,9 +28,9 @@ Each topic links to the steps where it shows up.
 | Durations (`time.Duration`) | [1.2](1.2-opening-hours.md#durations) |
 | Email validation (`net/mail`) | [1.4](1.4-members-and-actors.md#validating-emails) |
 | `embed` and `fs.Sub` | [2.2](2.2-tenant-schemas.md#embedding-files-with-embed) |
-| Embedded structs, promoted fields | [2.4b](2.4b-space-store.md#embedded-structs) |
+| Embedded structs, promoted fields | [2.4b](2.4b-space-store.md#embedded-structs), [2.5](2.5-booking-store.md#rebuilding-without-the-constructor) |
 | `.env` and `.env.example` | [2.1](2.1-postgres-and-migrations.md#env-and-envexample) |
-| `errors.As`, `pgconn.PgError` | [2.2](2.2-tenant-schemas.md#checking-which-constraint-refused-a-row), [2.3](2.3-bookings.md#exclusion-constraints), [2.4b](2.4b-space-store.md#foreign-key-errors) |
+| `errors.As`, `pgconn.PgError` | [2.2](2.2-tenant-schemas.md#checking-which-constraint-refused-a-row), [2.3](2.3-bookings.md#exclusion-constraints), [2.4b](2.4b-space-store.md#foreign-key-errors), [2.5](2.5-booking-store.md#one-error-several-meanings-errorsas-and-a-switch) |
 | `errors.Is` | [1.3](1.3-booking-rules.md#errorsis), [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
 | `errors.Join` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
 | Exclusion constraints, GiST, `btree_gist` | [2.3](2.3-bookings.md#exclusion-constraints) |
@@ -41,13 +41,16 @@ Each topic links to the steps where it shows up.
 | `go tool` dependencies | [0.1](0.1-foundation.md#go-tool-dependencies), [2.1](2.1-postgres-and-migrations.md#go-tool-again) |
 | `go vet`, `gofmt`, `staticcheck` | [0.1](0.1-foundation.md#the-makefile) |
 | Goroutines | [1.8](1.8-in-memory-store.md#goroutines) |
+| Guarded `UPDATE`, `:execrows`, `RowsAffected` | [2.5](2.5-booking-store.md#checking-and-writing-in-one-statement) |
 | Identity columns, sequence gaps | [2.1](2.1-postgres-and-migrations.md#identity-columns) |
 | Implicit interfaces | [1.5](1.5-services-and-stores.md#implicit-interfaces) |
 | Instants vs wall-clock time, `Time.In` | [1.2](1.2-opening-hours.md#instants-vs-wall-clock) |
 | Integer conversions (`int32(x)`), wrap-around | [2.4b](2.4b-space-store.md#mapping-rows-to-domain-types) |
+| Isolation levels, READ COMMITTED re-checks, row locks | [2.5](2.5-booking-store.md#many-at-once) |
 | `internal/` packages | [1.8](1.8-in-memory-store.md#internal) |
 | `io.Reader` and `io.Writer` | [1.9](1.9-repl.md#ioreader-and-iowriter) |
 | `iota` enums with a safe zero value | [1.4](1.4-members-and-actors.md#small-enums-with-iota) |
+| Lazy expiry, conditions a constraint can't hold | [2.5](2.5-booking-store.md#lazy-expiry) |
 | Lining up columns (`text/tabwriter`, `Flush`) | [1.10](1.10-repl-catches-up.md#lining-up-columns-with-texttabwriter) |
 | Logic races vs data races | [1.8](1.8-in-memory-store.md#the-race-detector) |
 | Loop variables per iteration (Go 1.22) | [1.8](1.8-in-memory-store.md#goroutines) |
@@ -58,7 +61,7 @@ Each topic links to the steps where it shows up.
 | Migrations with goose, up and down | [2.1](2.1-postgres-and-migrations.md#migrations-with-goose) |
 | Modules, packages, `go.mod` | [0.1](0.1-foundation.md#modules-and-packages) |
 | N+1 queries, grouping rows with a map | [2.4b](2.4b-space-store.md#two-queries-not-one-per-space) |
-| `NULL` vs Go zero values | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#null-and-gos-zero-time), [2.4b](2.4b-space-store.md#mapping-rows-to-domain-types) |
+| `NULL` vs Go zero values | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#null-and-gos-zero-time), [2.4b](2.4b-space-store.md#mapping-rows-to-domain-types), [2.5](2.5-booking-store.md#rebuilding-without-the-constructor) |
 | Partial unique indexes and constraints | [2.2](2.2-tenant-schemas.md#the-tenant-tables), [2.3](2.3-bookings.md#a-partial-constraint-and-why-now-cant-be-in-it) |
 | `pgx.Identifier`, SQL names vs parameters | [2.2](2.2-tenant-schemas.md#building-sql-names-safely-pgxidentifier) |
 | pgx query exec modes, stale prepared plans | [2.4](2.4-sqlc-and-withtenant.md#query-exec-modes-and-stale-plans) |
@@ -67,8 +70,8 @@ Each topic links to the steps where it shows up.
 | psql `ON_ERROR_ROLLBACK` | [2.1](2.1-postgres-and-migrations.md#on_error_rollback) |
 | Range copies; changing slice elements by index | [1.7](1.7-deleting-a-member.md#slices-of-values-changing-elements-in-a-loop) |
 | Range types, `tstzrange` and `[)` bounds | [2.3](2.3-bookings.md#ranges-and-half-open-bounds) |
-| Read, check, write: the store decides the winner | [1.5](1.5-services-and-stores.md#read-check-write), [1.8](1.8-in-memory-store.md#why-the-store-decides-the-winner) |
-| Rebuilding domain types through the constructor | [2.4b](2.4b-space-store.md#rebuilding-through-the-constructor) |
+| Read, check, write: the store decides the winner | [1.5](1.5-services-and-stores.md#read-check-write), [1.8](1.8-in-memory-store.md#why-the-store-decides-the-winner), [2.5](2.5-booking-store.md#checking-and-writing-in-one-statement) |
+| Rebuilding domain types through the constructor | [2.4b](2.4b-space-store.md#rebuilding-through-the-constructor), [2.5](2.5-booking-store.md#rebuilding-without-the-constructor) (when it can't) |
 | Rules the database checks vs rules in Go | [2.3](2.3-bookings.md#rules-the-database-checks-and-rules-it-leaves-to-go) |
 | Saving a batch all or nothing | [1.7](1.7-deleting-a-member.md#a-batch-saved-all-or-nothing) |
 | `search_path` and `current_schema()` | [2.2](2.2-tenant-schemas.md#one-goose-table-per-schema) |
@@ -81,13 +84,13 @@ Each topic links to the steps where it shows up.
 | `switch` with no value, first broken rule wins | [1.1](1.1-space.md#constructors), [1.3](1.3-booking-rules.md#the-rules-as-one-switch) |
 | `sync.Mutex` and `defer Unlock` | [1.8](1.8-in-memory-store.md#syncmutex) |
 | `sync.WaitGroup` and `wg.Go` | [1.8](1.8-in-memory-store.md#goroutines) |
-| Table-driven tests and subtests (`t.Run`) | [1.1](1.1-space.md#table-driven-tests) |
+| Table-driven tests and subtests (`t.Run`) | [1.1](1.1-space.md#table-driven-tests), [2.5](2.5-booking-store.md#subtests-and-shared-test-helpers) |
 | Terminal detection (`os.ModeCharDevice`) | [1.9](1.9-repl.md#terminal-or-script) |
 | Test fakes | [1.5](1.5-services-and-stores.md#implicit-interfaces) |
-| Test helpers (`t.Helper`) | [1.2](1.2-opening-hours.md#test-helpers) |
+| Test helpers (`t.Helper`) | [1.2](1.2-opening-hours.md#test-helpers), [2.5](2.5-booking-store.md#subtests-and-shared-test-helpers) |
 | Tests, `t.Errorf` vs `t.Fatalf` | [0.1](0.1-foundation.md#tests) |
 | Time layouts, `time.Parse`, `time.Date` normalizing | [1.9](1.9-repl.md#parsing-times) |
-| Timestamp precision, Go nanoseconds vs Postgres microseconds | [2.4b](2.4b-space-store.md#timestamps-lose-their-nanoseconds) |
+| Timestamp precision, Go nanoseconds vs Postgres microseconds | [2.4b](2.4b-space-store.md#timestamps-lose-their-nanoseconds), [2.5](2.5-booking-store.md#comparing-bookings) |
 | Transaction-local settings (`set_config`, `SET LOCAL`) | [2.4](2.4-sqlc-and-withtenant.md#settings-that-end-with-the-transaction) |
 | Unexported helper methods | [1.6](1.6-who-can-book.md#unexported-helper-methods), [1.7](1.7-deleting-a-member.md#a-rule-without-an-actor) |
 | Validate everything before changing anything | [1.4](1.4-members-and-actors.md#validate-everything-before-changing-anything) |

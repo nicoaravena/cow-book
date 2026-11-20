@@ -15,7 +15,9 @@ There is no status field. The state comes from which timestamps are set (zero me
 | any | any | set | **Cancelled** |
 
 Pending and expired bookings both hold their slot. An expired one is cancelled lazily when a new
-booking needs the slot (2.5; the in-memory store doesn't do this).
+booking needs the slot: `postgres.BookingStore.CreateBooking` does it in the same transaction
+(2.5). The in-memory store doesn't. Until then an expired booking is still not cancelled in
+storage, so anything showing free slots must ask `State(now)`, not just `Cancelled()`.
 
 ```text
               NewBooking by member           NewBooking by staff
@@ -112,9 +114,28 @@ Read-only, for stores and the REPL outside the package:
 | `Cancelled()` | Whether `cancelledAt` is set |
 | `Approved()` | Whether `approvedAt` is set. `false` for a booking that never needed approval |
 | `ApprovalDeadline()` | When a staff-made booking must be approved by; zero for a member's own booking (1.9) |
+| `BookedBy()` | The staff member who made it; 0 for a member's own booking (2.5) |
+| `ApprovedAt()`, `CancelledAt()` | When it was approved or cancelled; zero if not (2.5) |
+| `CreatedAt()`, `UpdatedAt()` | When it was made and last changed (2.5) |
 
-Not exposed yet: `bookedBy`, the other timestamps, and a way to rebuild a booking
-from a database row (2.5).
+## `RestoreBooking(r BookingRecord) (Booking, error)`
+
+Rebuilds a stored booking (2.5). `BookingRecord` embeds `BookingParams` and adds `ID`, `SpaceID`,
+`BookedBy`, `ApprovalDeadline`, `ApprovedAt`, `CancelledAt`, `CreatedAt` and `UpdatedAt`. A zero
+time or a zero `BookedBy` means not set.
+
+It can't go through `NewBooking` as `RestoreSpace` goes through `NewSpace`: that needs the actor
+and the space, and refuses a start in the past. So it checks only the rules that hold forever:
+
+| Rule | Error |
+| --- | --- |
+| `MemberID` > 0 | `ErrInvalidMember` |
+| `SpaceID` > 0 | `ErrInvalidSpace` |
+| `Attendees` >= 1 | `ErrInvalidAttendees` |
+| `Start` before `End` | `ErrInvalidBookingTime` |
+
+That the approval columns fit together is left to the table's checks
+(`bookings_approval_iff_staff`, `bookings_approved_needs_deadline`).
 
 ## Known gaps
 
