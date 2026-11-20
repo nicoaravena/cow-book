@@ -181,3 +181,66 @@ func TestMemberAccessors(t *testing.T) {
 		t.Errorf("Name(), Email() = %q, %q, want %q, %q", m.Name(), m.Email(), m.name, m.email)
 	}
 }
+
+func TestRestoreMember(t *testing.T) {
+	deleted := memberNow.Add(48 * time.Hour)
+	r := MemberRecord{
+		ID:           7,
+		MemberParams: MemberParams{Name: " Ana Rojas ", Email: "Ana@Example.com"},
+		CreatedAt:    memberNow,
+		UpdatedAt:    deleted,
+		DeletedAt:    deleted,
+	}
+
+	m, err := RestoreMember(r)
+	if err != nil {
+		t.Fatalf("RestoreMember() error = %v, want nil", err)
+	}
+
+	if m.ID != 7 {
+		t.Errorf("ID = %d, want 7", m.ID)
+	}
+	if m.Name() != "Ana Rojas" || m.Email() != "ana@example.com" {
+		t.Errorf("Name(), Email() = %q, %q, want them normalized as NewMember does", m.Name(), m.Email())
+	}
+	if !m.CreatedAt().Equal(memberNow) {
+		t.Errorf("CreatedAt() = %v, want %v", m.CreatedAt(), memberNow)
+	}
+	if !m.UpdatedAt().Equal(deleted) {
+		t.Errorf("UpdatedAt() = %v, want %v", m.UpdatedAt(), deleted)
+	}
+	if !m.DeletedAt().Equal(deleted) || !m.Deleted() {
+		t.Errorf("DeletedAt(), Deleted() = %v, %v, want %v, true", m.DeletedAt(), m.Deleted(), deleted)
+	}
+}
+
+func TestRestoreMemberNotDeleted(t *testing.T) {
+	m, err := RestoreMember(MemberRecord{ID: 1, MemberParams: validMemberParams(), CreatedAt: memberNow, UpdatedAt: memberNow})
+	if err != nil {
+		t.Fatalf("RestoreMember() error = %v, want nil", err)
+	}
+	if m.Deleted() || !m.DeletedAt().IsZero() {
+		t.Errorf("Deleted(), DeletedAt() = %v, %v, want false and the zero time", m.Deleted(), m.DeletedAt())
+	}
+}
+
+func TestRestoreMemberValidates(t *testing.T) {
+	tests := []struct {
+		name   string
+		change func(p *MemberParams)
+		want   error
+	}{
+		{"blank name", func(p *MemberParams) { p.Name = " " }, ErrMemberNameRequired},
+		{"bad email", func(p *MemberParams) { p.Email = "ana@" }, ErrInvalidMemberEmail},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := validMemberParams()
+			tt.change(&p)
+			_, err := RestoreMember(MemberRecord{ID: 1, MemberParams: p})
+			if !errors.Is(err, tt.want) {
+				t.Errorf("RestoreMember() error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}

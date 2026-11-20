@@ -63,7 +63,7 @@ Takes no actor yet: who may delete arrives with 3.7 and 4.6.
 
 ## Known gaps
 
-- `Delete` lists, then saves, so a booking created in between stays active. 2.6 closes this in one
-  transaction.
+- `Delete` lists, then saves, so a booking created in between isn't in its list. The Postgres
+  `SaveDeletion` cancels it anyway, in the same transaction (2.6); the in-memory store doesn't.
 - `Cancel` and `Approve` return `ErrBookingNotFound` before checking permission, so a member can
   tell which booking IDs exist within their operator. Revisit at 3.6.

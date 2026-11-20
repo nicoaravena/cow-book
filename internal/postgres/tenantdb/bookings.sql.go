@@ -38,6 +38,56 @@ func (q *Queries) ApproveBooking(ctx context.Context, arg ApproveBookingParams) 
 	return result.RowsAffected(), nil
 }
 
+const cancelBooking = `-- name: CancelBooking :execrows
+UPDATE bookings
+SET cancelled_at = $1, updated_at = $2
+WHERE id = $3
+  AND cancelled_at IS NULL
+`
+
+type CancelBookingParams struct {
+	CancelledAt pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	ID          int64
+}
+
+// CancelBooking records the cancellation only while the booking isn't
+// cancelled yet, so of two racing cancels one changes the row and the other
+// changes 0 rows. It writes only the cancel columns: an approval saved in
+// between keeps its approved_at.
+func (q *Queries) CancelBooking(ctx context.Context, arg CancelBookingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelBooking, arg.CancelledAt, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const cancelMemberBookingsEndingAfter = `-- name: CancelMemberBookingsEndingAfter :execrows
+UPDATE bookings
+SET cancelled_at = $1, updated_at = $1
+WHERE member_id = $2
+  AND cancelled_at IS NULL
+  AND ends_at > $1
+`
+
+type CancelMemberBookingsEndingAfterParams struct {
+	Now      pgtype.Timestamptz
+	MemberID int64
+}
+
+// CancelMemberBookingsEndingAfter cancels, at @now, every booking of the
+// member that isn't cancelled and hasn't ended by @now: the rule of
+// ListMemberBookingsEndingAfter and of Booking.cancel. Member deletion runs it
+// last, for bookings made after the service listed them.
+func (q *Queries) CancelMemberBookingsEndingAfter(ctx context.Context, arg CancelMemberBookingsEndingAfterParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelMemberBookingsEndingAfter, arg.Now, arg.MemberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createBooking = `-- name: CreateBooking :one
 INSERT INTO bookings (
     space_id, member_id, booked_by, attendees, starts_at, ends_at,
@@ -140,4 +190,53 @@ func (q *Queries) GetBooking(ctx context.Context, id int64) (Booking, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listMemberBookingsEndingAfter = `-- name: ListMemberBookingsEndingAfter :many
+SELECT id, space_id, member_id, booked_by, attendees, starts_at, ends_at, approval_deadline, approved_at, cancelled_at, created_at, updated_at FROM bookings
+WHERE member_id = $1
+  AND cancelled_at IS NULL
+  AND ends_at > $2
+ORDER BY starts_at, id
+`
+
+type ListMemberBookingsEndingAfterParams struct {
+	MemberID int64
+	After    pgtype.Timestamptz
+}
+
+// ListMemberBookingsEndingAfter returns the member's bookings that aren't
+// cancelled and end after @after, the ones deleting the member cancels.
+// bookings_member_id_idx finds them.
+func (q *Queries) ListMemberBookingsEndingAfter(ctx context.Context, arg ListMemberBookingsEndingAfterParams) ([]Booking, error) {
+	rows, err := q.db.Query(ctx, listMemberBookingsEndingAfter, arg.MemberID, arg.After)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Booking
+	for rows.Next() {
+		var i Booking
+		if err := rows.Scan(
+			&i.ID,
+			&i.SpaceID,
+			&i.MemberID,
+			&i.BookedBy,
+			&i.Attendees,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.ApprovalDeadline,
+			&i.ApprovedAt,
+			&i.CancelledAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

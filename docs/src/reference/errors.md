@@ -53,7 +53,7 @@ in 3.5. It isn't in the code, and 3.5 may change it:
 | --- | --- | --- |
 | `ErrMemberNameRequired` | invalid | `NewMember` |
 | `ErrInvalidMemberEmail` | invalid | `NewMember` |
-| `ErrMemberDeleted` | conflict | `Member.Delete`, `SaveDeletion`, and the `BookingService` methods for a deleted member |
+| `ErrMemberDeleted` | conflict | `Member.Delete`, `SaveDeletion`, the `BookingService` methods for a deleted member, and `postgres.BookingStore.CreateBooking` for a member deleted meanwhile (2.6) |
 
 ## Stores
 
@@ -64,7 +64,7 @@ Declared in `cowbook/service.go`, returned by store implementations and passed o
 | `ErrSlotTaken` | conflict | `CreateBooking`; in Postgres, `23P01` from `bookings_no_overlap` |
 | `ErrBookingNotFound` | not found | `GetBooking`, `SaveCancellation`, `SaveApproval` |
 | `ErrSpaceNotFound` | not found | `GetSpace`; Postgres `CreateBooking` for a space deleted meanwhile |
-| `ErrMemberNotFound` | not found | `GetMember`, `SaveDeletion`; Postgres `CreateBooking` for a member deleted meanwhile |
+| `ErrMemberNotFound` | not found | `GetMember`, `SaveDeletion`; Postgres `CreateBooking` for a member removed meanwhile |
 
 Stores may also return `ctx.Err()` (`context.Canceled`, `context.DeadlineExceeded`) when the
 caller's context is done, and, in M2, database errors that aren't any of the above.

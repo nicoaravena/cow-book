@@ -15,12 +15,11 @@ import (
 	"nicoaravena/cow-book-app/internal/postgres/tenantdb"
 )
 
+// The compiler checks that *BookingStore implements cowbook.BookingStore.
+var _ cowbook.BookingStore = (*BookingStore)(nil)
+
 // BookingStore keeps one tenant's bookings. Every method runs in WithTenant,
 // as in SpaceStore.
-//
-// It has CreateBooking, GetBooking and SaveApproval so far. SaveCancellation
-// and ListMemberBookingsEndingAfter arrive in 2.6, and with them the check
-// that it implements cowbook.BookingStore.
 type BookingStore struct {
 	pool     *pgxpool.Pool
 	tenantID int64
@@ -37,13 +36,30 @@ func NewBookingStore(pool *pgxpool.Pool, tenantID int64) *BookingStore {
 // cancelled, pending ones included, and cowbook.ErrSpaceNotFound or
 // cowbook.ErrMemberNotFound if the tenant has no such space or member.
 //
+// It returns cowbook.ErrMemberDeleted if the member is deleted. The service
+// checks that first, so this catches a deletion since: the member's row is
+// locked before the insert and stays locked until commit. A deletion saved
+// meanwhile is waited for, then seen; one saved after waits for this insert,
+// then cancels the booking (see MemberStore.SaveDeletion).
+//
 // A pending booking whose approval deadline has passed doesn't count: in the
 // same transaction, before the insert, the overlapping ones are cancelled at
 // b.CreatedAt(), the time the service's clock gave NewBooking. If the insert
 // then fails, those cancellations roll back with it.
 func (s *BookingStore) CreateBooking(ctx context.Context, b cowbook.Booking) (cowbook.Booking, error) {
 	err := WithTenant(ctx, s.pool, s.tenantID, func(q *tenantdb.Queries) error {
-		_, err := q.ExpireLapsedPending(ctx, tenantdb.ExpireLapsedPendingParams{
+		deletedAt, err := q.LockMember(ctx, b.MemberID())
+		if errors.Is(err, pgx.ErrNoRows) {
+			return cowbook.ErrMemberNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if deletedAt.Valid {
+			return cowbook.ErrMemberDeleted
+		}
+
+		_, err = q.ExpireLapsedPending(ctx, tenantdb.ExpireLapsedPendingParams{
 			Now:      timestamptz(b.CreatedAt()),
 			SpaceID:  b.SpaceID(),
 			StartsAt: timestamptz(b.Start()),
@@ -70,6 +86,13 @@ func (s *BookingStore) CreateBooking(ctx context.Context, b cowbook.Booking) (co
 
 	// The constraint names are checked as well as the codes, so a constraint
 	// added later with the same code isn't mistaken for one of these.
+	// The member lock's own refusals come back wrapped by WithTenant.
+	switch {
+	case errors.Is(err, cowbook.ErrMemberNotFound):
+		return cowbook.Booking{}, cowbook.ErrMemberNotFound
+	case errors.Is(err, cowbook.ErrMemberDeleted):
+		return cowbook.Booking{}, cowbook.ErrMemberDeleted
+	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch {
@@ -104,6 +127,68 @@ func (s *BookingStore) GetBooking(ctx context.Context, id int64) (cowbook.Bookin
 		return cowbook.Booking{}, err
 	}
 	return bookingFromRow(row)
+}
+
+// SaveCancellation stores the cancellation of a booking that Cancel has
+// changed. It writes only cancelled_at and updated_at, and only while the
+// stored booking isn't cancelled: the check and the write are one UPDATE, so
+// of two racing calls only one can pass it, and the loser gets
+// cowbook.ErrAlreadyCancelled. An approval saved since b was read keeps its
+// approved_at. It returns cowbook.ErrBookingNotFound if the tenant has no such
+// booking.
+func (s *BookingStore) SaveCancellation(ctx context.Context, b cowbook.Booking) error {
+	return WithTenant(ctx, s.pool, s.tenantID, func(q *tenantdb.Queries) error {
+		n, err := q.CancelBooking(ctx, cancelParams(b))
+		if err != nil || n == 1 {
+			return err
+		}
+
+		// Nothing changed: the booking is missing or already cancelled.
+		if _, err := q.GetBooking(ctx, b.ID); errors.Is(err, pgx.ErrNoRows) {
+			return cowbook.ErrBookingNotFound
+		} else if err != nil {
+			return err
+		}
+		return cowbook.ErrAlreadyCancelled
+	})
+}
+
+// cancelParams writes b's cancellation, as Cancel or the deletion of its
+// member set it.
+func cancelParams(b cowbook.Booking) tenantdb.CancelBookingParams {
+	return tenantdb.CancelBookingParams{
+		ID:          b.ID,
+		CancelledAt: timestamptz(b.CancelledAt()),
+		UpdatedAt:   timestamptz(b.UpdatedAt()),
+	}
+}
+
+// ListMemberBookingsEndingAfter returns the member's bookings that aren't
+// cancelled and end after t, ordered by start. A lapsed pending booking is
+// among them: deleting the member cancels it like any other.
+func (s *BookingStore) ListMemberBookingsEndingAfter(ctx context.Context, memberID int64, t time.Time) ([]cowbook.Booking, error) {
+	var rows []tenantdb.Booking
+	err := WithTenant(ctx, s.pool, s.tenantID, func(q *tenantdb.Queries) error {
+		var err error
+		rows, err = q.ListMemberBookingsEndingAfter(ctx, tenantdb.ListMemberBookingsEndingAfterParams{
+			MemberID: memberID,
+			After:    timestamptz(t),
+		})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	bs := make([]cowbook.Booking, 0, len(rows))
+	for _, row := range rows {
+		b, err := bookingFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		bs = append(bs, b)
+	}
+	return bs, nil
 }
 
 // SaveApproval stores the approval of a booking that Approve has changed. It

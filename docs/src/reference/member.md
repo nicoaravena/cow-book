@@ -33,13 +33,22 @@ This only changes the member. Cancelling their bookings is `MemberService.Delete
 | `Name()` | The trimmed name (1.10) |
 | `Email()` | The lowercased email (1.10) |
 | `Deleted()` | Whether `deletedAt` is set |
+| `CreatedAt()`, `UpdatedAt()` | When it was created and last changed (2.6) |
+| `DeletedAt()` | When it was deleted; zero if not (2.6) |
+
+## `RestoreMember(r MemberRecord) (Member, error)`
+
+Rebuilds a stored member (2.6). `MemberRecord` embeds `MemberParams` and adds `ID`, `CreatedAt`,
+`UpdatedAt` and `DeletedAt`, a zero `DeletedAt` meaning not deleted. It goes through `NewMember`,
+as `RestoreSpace` goes through `NewSpace`, so a stored name or email that breaks a rule returns
+that rule's error, and the name and email are trimmed and lowercased again.
 
 ## Effects of deletion
 
 | Where | Effect |
 | --- | --- |
 | `MemberService.Delete` | Cancels every booking of theirs that hasn't ended, pending and in-progress ones included |
-| `BookingService.Book` | Refuses to book for them: `ErrMemberDeleted` |
+| `BookingService.Book` | Refuses to book for them: `ErrMemberDeleted`. In Postgres, `CreateBooking` also refuses a member deleted after the service's check (2.6) |
 | `BookingService.Cancel`, `Approve` | Refuses them as the actor: `ErrMemberDeleted`. Staff can still cancel their bookings |
 | `MemberStore.GetMember` | Still returns them, so callers can tell deleted from missing |
 

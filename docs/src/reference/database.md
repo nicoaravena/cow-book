@@ -104,6 +104,12 @@ Queries live in `internal/postgres/queries/*.sql`, run with unqualified table na
 | `ExpireLapsedPending(ctx, {Now, SpaceID, StartsAt, EndsAt})` | Rows changed. Cancels at `Now` the space's bookings not cancelled or approved, with `approval_deadline <= Now`, overlapping `[StartsAt, EndsAt)` |
 | `GetBooking(ctx, id)` | The row as a `tenantdb.Booking`; `pgx.ErrNoRows` if there's no such booking |
 | `ApproveBooking(ctx, {ID, ApprovedAt, UpdatedAt})` | Rows changed, 1 or 0. Sets `approved_at` only if not cancelled, not approved, and `approval_deadline > ApprovedAt` |
+| `CancelBooking(ctx, {ID, CancelledAt, UpdatedAt})` | Rows changed, 1 or 0. Sets `cancelled_at` only if not cancelled yet (2.6) |
+| `ListMemberBookingsEndingAfter(ctx, {MemberID, After})` | The member's bookings with `cancelled_at IS NULL` and `ends_at > After`, by start then `id` (2.6) |
+| `CancelMemberBookingsEndingAfter(ctx, {MemberID, Now})` | Rows changed. Cancels at `Now` every booking of the member not cancelled and with `ends_at > Now` (2.6) |
+| `GetMember(ctx, id)` | The row as a `tenantdb.Member`, deleted or not; `pgx.ErrNoRows` if there's no such member (2.6) |
+| `LockMember(ctx, id)` | The member's `deleted_at`, read `FOR SHARE`: the row stays locked until the transaction ends; `pgx.ErrNoRows` if there's no such member (2.6) |
+| `DeleteMember(ctx, {ID, DeletedAt, UpdatedAt})` | Rows changed, 1 or 0. Sets `deleted_at` only if not deleted yet (2.6) |
 
 ## Tenant migrations
 
@@ -158,6 +164,12 @@ One open period on one weekday, the rows of a `WeeklyHours`. Primary key
 | `email` | `text` | Lowercased and trimmed (`members_email_normalized`); unique among members not deleted (`members_email_key`, a partial unique index) |
 | `created_at`, `updated_at` | `timestamptz` | Default `now()` |
 | `deleted_at` | `timestamptz` | `NULL` until the member is deleted |
+
+A booking insert and a member deletion meet on the member's row (2.6). `CreateBooking` reads it
+`FOR SHARE` before inserting; `DeleteMember`'s `UPDATE` takes a `FOR NO KEY UPDATE` lock, which
+conflicts with that, so whichever comes second waits for the first to commit. The foreign key
+check on `bookings.member_id` takes only `FOR KEY SHARE`, which an `UPDATE` of a non-key column
+doesn't conflict with, so the foreign key alone doesn't make them wait.
 
 ### `bookings`
 

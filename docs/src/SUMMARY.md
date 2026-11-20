@@ -23,6 +23,7 @@
 - [2.4 sqlc and WithTenant](concepts/2.4-sqlc-and-withtenant.md)
 - [2.4b Space store](concepts/2.4b-space-store.md)
 - [2.5 Booking store](concepts/2.5-booking-store.md)
+- [2.6 Cancelling and deleting in transactions](concepts/2.6-cancel-and-delete.md)
 
 # Reference
 

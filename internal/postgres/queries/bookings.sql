@@ -37,3 +37,34 @@ WHERE id = @id
   AND cancelled_at IS NULL
   AND approved_at IS NULL
   AND approval_deadline > @approved_at;
+
+-- name: CancelBooking :execrows
+-- CancelBooking records the cancellation only while the booking isn't
+-- cancelled yet, so of two racing cancels one changes the row and the other
+-- changes 0 rows. It writes only the cancel columns: an approval saved in
+-- between keeps its approved_at.
+UPDATE bookings
+SET cancelled_at = @cancelled_at, updated_at = @updated_at
+WHERE id = @id
+  AND cancelled_at IS NULL;
+
+-- name: ListMemberBookingsEndingAfter :many
+-- ListMemberBookingsEndingAfter returns the member's bookings that aren't
+-- cancelled and end after @after, the ones deleting the member cancels.
+-- bookings_member_id_idx finds them.
+SELECT * FROM bookings
+WHERE member_id = @member_id
+  AND cancelled_at IS NULL
+  AND ends_at > @after
+ORDER BY starts_at, id;
+
+-- name: CancelMemberBookingsEndingAfter :execrows
+-- CancelMemberBookingsEndingAfter cancels, at @now, every booking of the
+-- member that isn't cancelled and hasn't ended by @now: the rule of
+-- ListMemberBookingsEndingAfter and of Booking.cancel. Member deletion runs it
+-- last, for bookings made after the service listed them.
+UPDATE bookings
+SET cancelled_at = @now, updated_at = @now
+WHERE member_id = @member_id
+  AND cancelled_at IS NULL
+  AND ends_at > @now;

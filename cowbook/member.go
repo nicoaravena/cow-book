@@ -34,6 +34,16 @@ func (m Member) Email() string { return m.email }
 // Deleted reports whether the member has been deleted.
 func (m Member) Deleted() bool { return !m.deletedAt.IsZero() }
 
+// CreatedAt returns when the member was created.
+func (m Member) CreatedAt() time.Time { return m.createdAt }
+
+// UpdatedAt returns when the member was last changed.
+func (m Member) UpdatedAt() time.Time { return m.updatedAt }
+
+// DeletedAt returns when the member was deleted, or the zero time if they
+// haven't been.
+func (m Member) DeletedAt() time.Time { return m.deletedAt }
+
 // MemberParams holds the values needed to create a Member.
 type MemberParams struct {
 	Name  string
@@ -61,6 +71,29 @@ func NewMember(p MemberParams, now time.Time) (Member, error) {
 		createdAt: now,
 		updatedAt: now,
 	}, nil
+}
+
+// MemberRecord holds a stored member's values: the ones NewMember takes, plus
+// those a store keeps. A zero DeletedAt stands for NULL.
+type MemberRecord struct {
+	ID int64
+	MemberParams
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt time.Time
+}
+
+// RestoreMember rebuilds a stored member. Like RestoreSpace it goes through
+// the constructor, so a row that breaks one of NewMember's rules fails here.
+func RestoreMember(r MemberRecord) (Member, error) {
+	m, err := NewMember(r.MemberParams, r.CreatedAt)
+	if err != nil {
+		return Member{}, err
+	}
+	m.ID = r.ID
+	m.updatedAt = r.UpdatedAt
+	m.deletedAt = r.DeletedAt
+	return m, nil
 }
 
 // validEmail reports whether email is a bare address. ParseAddress alone also

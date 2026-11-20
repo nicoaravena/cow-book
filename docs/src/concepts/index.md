@@ -20,6 +20,7 @@ Each topic links to the steps where it shows up.
 | `context.Context` | [1.5](1.5-services-and-stores.md#contextcontext) |
 | `context.WithoutCancel` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure), [2.4](2.4-sqlc-and-withtenant.md#defer-and-rolling-back) |
 | Data races and `go test -race` | [1.8](1.8-in-memory-store.md#the-race-detector) |
+| Deadlocks and lock order | [2.6](2.6-cancel-and-delete.md#lock-order-and-deadlocks) |
 | `database/sql` vs pgx, `stdlib.OpenDB` | [2.2](2.2-tenant-schemas.md#databasesql-and-pgx) |
 | Daylight saving time | [1.2](1.2-opening-hours.md#daylight-saving-time) |
 | Defensive copies (`slices.Clone`) | [1.4](1.4-members-and-actors.md#defensive-copies) |
@@ -41,12 +42,12 @@ Each topic links to the steps where it shows up.
 | `go tool` dependencies | [0.1](0.1-foundation.md#go-tool-dependencies), [2.1](2.1-postgres-and-migrations.md#go-tool-again) |
 | `go vet`, `gofmt`, `staticcheck` | [0.1](0.1-foundation.md#the-makefile) |
 | Goroutines | [1.8](1.8-in-memory-store.md#goroutines) |
-| Guarded `UPDATE`, `:execrows`, `RowsAffected` | [2.5](2.5-booking-store.md#checking-and-writing-in-one-statement) |
+| Guarded `UPDATE`, `:execrows`, `RowsAffected` | [2.5](2.5-booking-store.md#checking-and-writing-in-one-statement), [2.6](2.6-cancel-and-delete.md#cancelling-one-more-guarded-update) |
 | Identity columns, sequence gaps | [2.1](2.1-postgres-and-migrations.md#identity-columns) |
 | Implicit interfaces | [1.5](1.5-services-and-stores.md#implicit-interfaces) |
 | Instants vs wall-clock time, `Time.In` | [1.2](1.2-opening-hours.md#instants-vs-wall-clock) |
 | Integer conversions (`int32(x)`), wrap-around | [2.4b](2.4b-space-store.md#mapping-rows-to-domain-types) |
-| Isolation levels, READ COMMITTED re-checks, row locks | [2.5](2.5-booking-store.md#many-at-once) |
+| Isolation levels, READ COMMITTED re-checks, row locks | [2.5](2.5-booking-store.md#many-at-once), [2.6](2.6-cancel-and-delete.md#what-the-waiting-side-sees) |
 | `internal/` packages | [1.8](1.8-in-memory-store.md#internal) |
 | `io.Reader` and `io.Writer` | [1.9](1.9-repl.md#ioreader-and-iowriter) |
 | `iota` enums with a safe zero value | [1.4](1.4-members-and-actors.md#small-enums-with-iota) |
@@ -70,10 +71,11 @@ Each topic links to the steps where it shows up.
 | psql `ON_ERROR_ROLLBACK` | [2.1](2.1-postgres-and-migrations.md#on_error_rollback) |
 | Range copies; changing slice elements by index | [1.7](1.7-deleting-a-member.md#slices-of-values-changing-elements-in-a-loop) |
 | Range types, `tstzrange` and `[)` bounds | [2.3](2.3-bookings.md#ranges-and-half-open-bounds) |
-| Read, check, write: the store decides the winner | [1.5](1.5-services-and-stores.md#read-check-write), [1.8](1.8-in-memory-store.md#why-the-store-decides-the-winner), [2.5](2.5-booking-store.md#checking-and-writing-in-one-statement) |
-| Rebuilding domain types through the constructor | [2.4b](2.4b-space-store.md#rebuilding-through-the-constructor), [2.5](2.5-booking-store.md#rebuilding-without-the-constructor) (when it can't) |
+| Read, check, write: the store decides the winner | [1.5](1.5-services-and-stores.md#read-check-write), [1.8](1.8-in-memory-store.md#why-the-store-decides-the-winner), [2.5](2.5-booking-store.md#checking-and-writing-in-one-statement), [2.6](2.6-cancel-and-delete.md#lock-then-sweep) (reads that go stale) |
+| Rebuilding domain types through the constructor | [2.4b](2.4b-space-store.md#rebuilding-through-the-constructor), [2.5](2.5-booking-store.md#rebuilding-without-the-constructor) (when it can't), [2.6](2.6-cancel-and-delete.md#rebuilding-a-member) |
+| Row lock modes (`FOR SHARE`, `FOR KEY SHARE`, ...), foreign key locks | [2.6](2.6-cancel-and-delete.md#row-locks) |
 | Rules the database checks vs rules in Go | [2.3](2.3-bookings.md#rules-the-database-checks-and-rules-it-leaves-to-go) |
-| Saving a batch all or nothing | [1.7](1.7-deleting-a-member.md#a-batch-saved-all-or-nothing) |
+| Saving a batch all or nothing | [1.7](1.7-deleting-a-member.md#a-batch-saved-all-or-nothing), [2.6](2.6-cancel-and-delete.md#transactions-spanning-several-queries) |
 | `search_path` and `current_schema()` | [2.2](2.2-tenant-schemas.md#one-goose-table-per-schema) |
 | Sentinel errors | [1.1](1.1-space.md#sentinel-errors), [1.9](1.9-repl.md#errors-for-control-flow) |
 | Soft delete | [1.4](1.4-members-and-actors.md#soft-delete), [1.7](1.7-deleting-a-member.md) |
@@ -87,11 +89,14 @@ Each topic links to the steps where it shows up.
 | Table-driven tests and subtests (`t.Run`) | [1.1](1.1-space.md#table-driven-tests), [2.5](2.5-booking-store.md#subtests-and-shared-test-helpers) |
 | Terminal detection (`os.ModeCharDevice`) | [1.9](1.9-repl.md#terminal-or-script) |
 | Test fakes | [1.5](1.5-services-and-stores.md#implicit-interfaces) |
+| Testing an order of events (`pg_blocking_pids`, held transactions) | [2.6](2.6-cancel-and-delete.md#testing-an-order-of-events) |
 | Test helpers (`t.Helper`) | [1.2](1.2-opening-hours.md#test-helpers), [2.5](2.5-booking-store.md#subtests-and-shared-test-helpers) |
 | Tests, `t.Errorf` vs `t.Fatalf` | [0.1](0.1-foundation.md#tests) |
+| Tests that can fail: removing the guard | [2.6](2.6-cancel-and-delete.md#proving-the-tests-can-fail) |
 | Time layouts, `time.Parse`, `time.Date` normalizing | [1.9](1.9-repl.md#parsing-times) |
 | Timestamp precision, Go nanoseconds vs Postgres microseconds | [2.4b](2.4b-space-store.md#timestamps-lose-their-nanoseconds), [2.5](2.5-booking-store.md#comparing-bookings) |
 | Transaction-local settings (`set_config`, `SET LOCAL`) | [2.4](2.4-sqlc-and-withtenant.md#settings-that-end-with-the-transaction) |
+| Transactions spanning several queries | [2.6](2.6-cancel-and-delete.md#transactions-spanning-several-queries) |
 | Unexported helper methods | [1.6](1.6-who-can-book.md#unexported-helper-methods), [1.7](1.7-deleting-a-member.md#a-rule-without-an-actor) |
 | Validate everything before changing anything | [1.4](1.4-members-and-actors.md#validate-everything-before-changing-anything) |
 | Value types | [1.2](1.2-opening-hours.md#value-types) |

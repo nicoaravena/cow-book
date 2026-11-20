@@ -32,6 +32,7 @@ type bookingFixture struct {
 	pool    *pgxpool.Pool
 	tenant  int64
 	store   *BookingStore
+	mstore  *MemberStore
 	spaces  [2]cowbook.Space
 	loc     *time.Location
 	members []int64
@@ -43,6 +44,7 @@ func newBookingFixture(t *testing.T, n int) *bookingFixture {
 	pool := testPool(t)
 	f := &bookingFixture{pool: pool, tenant: createTestTenant(t, pool)}
 	f.store = NewBookingStore(pool, f.tenant)
+	f.mstore = NewMemberStore(pool, f.tenant)
 
 	spaces := NewSpaceStore(pool, f.tenant)
 	locationID := createLocation(t, pool, f.tenant, "Centre")
@@ -57,7 +59,7 @@ func newBookingFixture(t *testing.T, n int) *bookingFixture {
 		}
 	}
 
-	// No member store until 2.6, so plain SQL. generate_series gives one row
+	// MemberStore can't create members until 2.7, so plain SQL. generate_series gives one row
 	// per number, and the emails differ because the table wants them unique.
 	rows, err := pool.Query(t.Context(),
 		"INSERT INTO "+f.schema()+".members (name, email)"+
@@ -106,6 +108,34 @@ func (f *bookingFixture) create(t *testing.T, b cowbook.Booking) cowbook.Booking
 		t.Fatalf("CreateBooking: %v", err)
 	}
 	return b
+}
+
+// cancel cancels b on behalf of actor at now with f.store.SaveCancellation
+// and fails the test if either refuses. It returns the booking as cancelled.
+func (f *bookingFixture) cancel(t *testing.T, b cowbook.Booking, actor cowbook.Actor, now time.Time) cowbook.Booking {
+	t.Helper()
+	space := f.spaces[0]
+	if b.SpaceID() == f.spaces[1].ID {
+		space = f.spaces[1]
+	}
+	if err := b.Cancel(actor, space, now); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if err := f.store.SaveCancellation(t.Context(), b); err != nil {
+		t.Fatalf("SaveCancellation: %v", err)
+	}
+	return b
+}
+
+// deleteMember marks member id deleted at now with plain SQL, leaving their
+// bookings as they are.
+func (f *bookingFixture) deleteMember(t *testing.T, id int64, now time.Time) {
+	t.Helper()
+	_, err := f.pool.Exec(t.Context(),
+		"UPDATE "+f.schema()+".members SET deleted_at = $1, updated_at = $1 WHERE id = $2", now, id)
+	if err != nil {
+		t.Fatalf("delete member: %v", err)
+	}
 }
 
 // get reads booking id back and fails the test if it can't.
@@ -233,14 +263,9 @@ func TestBookingStoreSaveApprovalLosers(t *testing.T) {
 			wantErr: cowbook.ErrNotPending,
 		},
 		{
-			// SaveCancellation arrives in 2.6, so SQL cancels it for now.
 			name: "cancelled first",
 			winner: func(t *testing.T, f *bookingFixture, b cowbook.Booking) {
-				_, err := f.pool.Exec(t.Context(),
-					"UPDATE "+f.schema()+".bookings SET cancelled_at = $1 WHERE id = $2", bookingNow, b.ID)
-				if err != nil {
-					t.Fatalf("cancel: %v", err)
-				}
+				f.cancel(t, b, cowbook.MemberActor(b.MemberID()), bookingNow)
 			},
 			wantErr: cowbook.ErrAlreadyCancelled,
 		},
@@ -304,6 +329,7 @@ func TestBookingStoreNotFound(t *testing.T) {
 		call func() error
 	}{
 		{"GetBooking", func() error { _, err := f.store.GetBooking(t.Context(), 999999); return err }},
+		{"SaveCancellation", func() error { return f.store.SaveCancellation(t.Context(), unknown) }},
 		{"SaveApproval", func() error { return f.store.SaveApproval(t.Context(), unknown) }},
 	}
 	for _, tt := range tests {
@@ -315,8 +341,9 @@ func TestBookingStoreNotFound(t *testing.T) {
 	}
 }
 
-// The service loads the space and member first, so these come from the
-// foreign keys only when one is deleted in between.
+// The service loads the space and member first, so these come back only when
+// one is removed in between. An unknown member is found by the member lock
+// before the insert, an unknown space by the foreign key.
 func TestBookingStoreUnknownSpaceOrMember(t *testing.T) {
 	f := newBookingFixture(t, 1)
 
@@ -415,5 +442,89 @@ func TestBookingStoreLazyExpiry(t *testing.T) {
 				t.Errorf("CancelledAt, UpdatedAt = %v, %v; want %v", got.CancelledAt(), got.UpdatedAt(), tt.now)
 			}
 		})
+	}
+}
+
+func TestBookingStoreCancelledBookingFreesItsSlot(t *testing.T) {
+	f := newBookingFixture(t, 2)
+	b := f.create(t, f.newBooking(t, cowbook.MemberActor(f.members[0]), 0, f.members[0], 10, 12, bookingNow))
+	cancelled := f.cancel(t, b, cowbook.MemberActor(f.members[0]), bookingNow)
+	checkSameBooking(t, f.get(t, b.ID), cancelled)
+
+	f.create(t, f.newBooking(t, cowbook.MemberActor(f.members[1]), 0, f.members[1], 10, 12, bookingNow))
+}
+
+// Two requests can both read a booking, both pass Cancel and both try to
+// save. The store must let only the first through.
+func TestBookingStoreSaveCancellationLoser(t *testing.T) {
+	f := newBookingFixture(t, 1)
+	actor := cowbook.MemberActor(f.members[0])
+	stored := f.create(t, f.newBooking(t, actor, 0, f.members[0], 10, 12, bookingNow))
+
+	first := f.cancel(t, stored, actor, bookingNow)
+	second := stored
+	if err := second.Cancel(actor, f.spaces[0], bookingNow.Add(time.Hour)); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if err := f.store.SaveCancellation(t.Context(), second); !errors.Is(err, cowbook.ErrAlreadyCancelled) {
+		t.Errorf("second SaveCancellation error = %v, want %v", err, cowbook.ErrAlreadyCancelled)
+	}
+	checkSameBooking(t, f.get(t, stored.ID), first)
+}
+
+// A cancel read the booking before an approval of it was saved. The store
+// writes only the cancel columns, so the approval time stays, unlike in
+// internal/memstore, which replaces the whole booking.
+func TestBookingStoreCancelKeepsApproval(t *testing.T) {
+	f := newBookingFixture(t, 1)
+	member := cowbook.MemberActor(f.members[0])
+	stored := f.create(t, f.newBooking(t, cowbook.AdminActor(9), 0, f.members[0], 10, 12, bookingNow))
+
+	approved := stored
+	if err := approved.Approve(member, bookingNow.Add(time.Hour)); err != nil {
+		t.Fatalf("Approve: %v", err)
+	}
+	if err := f.store.SaveApproval(t.Context(), approved); err != nil {
+		t.Fatalf("SaveApproval: %v", err)
+	}
+	f.cancel(t, stored, member, bookingNow.Add(2*time.Hour))
+
+	got := f.get(t, stored.ID)
+	if !got.Cancelled() || !got.ApprovedAt().Equal(approved.ApprovedAt()) {
+		t.Errorf("Cancelled(), ApprovedAt() = %v, %v; want true, %v", got.Cancelled(), got.ApprovedAt(), approved.ApprovedAt())
+	}
+}
+
+func TestBookingStoreListMemberBookingsEndingAfter(t *testing.T) {
+	f := newBookingFixture(t, 2)
+	m1, m2 := f.members[0], f.members[1]
+	f.create(t, f.newBooking(t, cowbook.MemberActor(m1), 0, m1, 10, 11, bookingNow)) // ends at the cut-off
+	later := f.create(t, f.newBooking(t, cowbook.MemberActor(m1), 1, m1, 13, 14, bookingNow))
+	earlier := f.create(t, f.newBooking(t, cowbook.MemberActor(m1), 0, m1, 12, 13, bookingNow))
+	f.create(t, f.newBooking(t, cowbook.MemberActor(m2), 0, m2, 14, 15, bookingNow)) // another member
+	cancelled := f.create(t, f.newBooking(t, cowbook.MemberActor(m1), 0, m1, 15, 16, bookingNow))
+	f.cancel(t, cancelled, cowbook.MemberActor(m1), bookingNow)
+
+	got, err := f.store.ListMemberBookingsEndingAfter(t.Context(), m1, f.at(11))
+	if err != nil {
+		t.Fatalf("ListMemberBookingsEndingAfter: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("ListMemberBookingsEndingAfter returned %d bookings, want 2: %+v", len(got), got)
+	}
+	// Ordered by start, not by ID.
+	checkSameBooking(t, got[0], earlier)
+	checkSameBooking(t, got[1], later)
+}
+
+// The service refuses a deleted member before it calls the store. This is the
+// store's own check, for a member deleted after that.
+func TestBookingStoreRefusesDeletedMember(t *testing.T) {
+	f := newBookingFixture(t, 1)
+	b := f.newBooking(t, cowbook.AdminActor(9), 0, f.members[0], 10, 12, bookingNow)
+	f.deleteMember(t, f.members[0], bookingNow)
+
+	if _, err := f.store.CreateBooking(t.Context(), b); !errors.Is(err, cowbook.ErrMemberDeleted) {
+		t.Errorf("CreateBooking error = %v, want %v", err, cowbook.ErrMemberDeleted)
 	}
 }

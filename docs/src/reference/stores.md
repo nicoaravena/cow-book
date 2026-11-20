@@ -53,7 +53,7 @@ Differences from the Postgres store:
 
 - No lazy expiry: a pending booking past its approval deadline keeps holding its slot. Kept that
   way on purpose (2.5).
-- `CreateBooking` doesn't refuse a member deleted at the same moment.
+- `CreateBooking` doesn't refuse a member deleted at the same moment. Postgres does (2.6).
 - Saves replace the whole booking, so a cancel that read the booking before an approval was saved
   drops the approval time. The booking still ends cancelled.
 
@@ -74,19 +74,32 @@ with no windows, is an error wrapping that rule's sentinel. Times come back cut 
 microsecond (pgx drops the nanoseconds) and in `time.Local`; compare them with `Equal`.
 
 `postgres.BookingStore` (2.5), in `internal/postgres/bookings.go`, does the same for bookings:
-`NewBookingStore(pool, tenantID)`. It has three of `BookingStore`'s five methods so far;
-`SaveCancellation` and `ListMemberBookingsEndingAfter` arrive in 2.6, and with them the
-compile-time interface check.
+`NewBookingStore(pool, tenantID)`. It implements all of `BookingStore` since 2.6, checked at
+compile time.
 
 | Method | Does | Errors |
 | --- | --- | --- |
-| `CreateBooking(ctx, b)` | In one transaction: cancels the space's pending bookings that overlap `b` and whose deadline has passed by `b.CreatedAt()` (lazy expiry), then inserts `b`. If the insert fails, the expiry rolls back with it | `ErrSlotTaken` (`23P01` on `bookings_no_overlap`); `ErrSpaceNotFound`, `ErrMemberNotFound` (`23503` on `bookings_space_id_fkey`, `bookings_member_id_fkey`) |
+| `CreateBooking(ctx, b)` | In one transaction: locks the member's row `FOR SHARE` until commit (2.6), cancels the space's pending bookings that overlap `b` and whose deadline has passed by `b.CreatedAt()` (lazy expiry), then inserts `b`. If the insert fails, the expiry rolls back with it | `ErrMemberNotFound`, `ErrMemberDeleted` from the member lock; `ErrSlotTaken` (`23P01` on `bookings_no_overlap`); `ErrSpaceNotFound` (`23503` on `bookings_space_id_fkey`) |
 | `GetBooking(ctx, id)` | The booking, rebuilt with `RestoreBooking`. A lapsed booking comes back as stored, not cancelled | `ErrBookingNotFound` |
+| `SaveCancellation(ctx, b)` | Writes `cancelled_at` and `updated_at` only, in one `UPDATE` that matches only a booking not cancelled yet, so an approval saved meanwhile keeps its time (2.6) | `ErrBookingNotFound`; the loser gets `ErrAlreadyCancelled` |
 | `SaveApproval(ctx, b)` | Writes `approved_at` and `updated_at` only, in one `UPDATE` that matches only a booking still pending with its deadline after `b.ApprovedAt()` | `ErrBookingNotFound`; the loser gets `ErrAlreadyCancelled`, `ErrNotPending` or `ErrApprovalExpired` |
+| `ListMemberBookingsEndingAfter(ctx, memberID, t)` | The member's bookings not cancelled and ending after `t`, ordered by start. Lapsed pending ones included (2.6) | - |
 
 The store's clock is the booking's: lazy expiry uses `b.CreatedAt()`, which `NewBooking` took
-from the service's injected clock, so `CreateBooking` needs no `now` of its own. Members follow
-in 2.6 and 2.7.
+from the service's injected clock, so `CreateBooking` needs no `now` of its own.
+
+`postgres.MemberStore` (2.6), in `internal/postgres/members.go`: `NewMemberStore(pool,
+tenantID)`, with `GetMember` and `SaveDeletion`, checked at compile time. Creating and listing
+members arrive in 2.7.
+
+| Method | Does | Errors |
+| --- | --- | --- |
+| `GetMember(ctx, id)` | The member, deleted or not, rebuilt with `RestoreMember` | `ErrMemberNotFound` |
+| `SaveDeletion(ctx, m, cancelled)` | In one transaction: marks the member deleted only if they aren't yet, which locks the row until commit; saves each booking in `cancelled` that isn't cancelled already; then cancels at `m.DeletedAt()` any other booking of the member not cancelled and not ended, one made after the service's list | `ErrMemberNotFound`; the loser gets `ErrMemberDeleted` |
+
+The member row's lock is what makes deleting and booking at once safe. Whichever transaction
+takes it second waits for the first to commit: a booking then sees the member deleted and
+refuses, and a deletion then sees the new booking and cancels it.
 
 ### Test fake
 
@@ -101,4 +114,4 @@ Fields are unexported, so stores read them through accessors: `Booking.SpaceID`,
 `Booking.State`, `Member.Name`, `Email` and `Space.Name`, `Kind`, `Capacity`, `MaxBookingLength`. 2.4b adds `Space.LocationID`,
 `Hours`, `Available`, `CreatedAt`, `UpdatedAt`, and `RestoreSpace` to rebuild a `Space` from a row.
 2.5 adds `Booking.BookedBy`, `ApprovedAt`, `CancelledAt`, `CreatedAt`, `UpdatedAt` and
-`RestoreBooking`. Rebuilding a `Member` arrives in 2.6.
+`RestoreBooking`. 2.6 adds `Member.CreatedAt`, `UpdatedAt`, `DeletedAt` and `RestoreMember`.
