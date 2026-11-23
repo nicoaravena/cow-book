@@ -2,8 +2,8 @@
 -- The tenant needs migration 00002. Create a new tenant, or bring an existing
 -- one up to date, then pass its schema as the tenant variable:
 --
---   make create-tenant SLUG=south-hub NAME="South Hub"
---   make migrate-tenant TENANT=tenant_1
+--   just create-tenant SLUG=south-hub NAME="South Hub"
+--   just migrate-tenant TENANT=tenant_1
 --   docker compose exec -T db psql -U cowbook -d cowbook -v tenant=tenant_1 < examples/2.3-bookings.sql
 --
 -- Like 2.1 and 2.2, everything is rolled back at the end.

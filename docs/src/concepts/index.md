@@ -46,7 +46,7 @@ Each topic links to the steps where it shows up.
 | Functions as values | [1.5](1.5-services-and-stores.md#dependency-injection-including-the-clock), [3.1](3.1-serve.md#config-from-the-environment) |
 | Generated code (sqlc, `DO NOT EDIT`) | [2.4](2.4-sqlc-and-withtenant.md#generated-code-with-sqlc) |
 | `go tool` dependencies | [0.1](0.1-foundation.md#go-tool-dependencies), [2.1](2.1-postgres-and-migrations.md#go-tool-again) |
-| `go vet`, `gofmt`, `staticcheck` | [0.1](0.1-foundation.md#the-makefile) |
+| `go vet`, `gofmt`, `staticcheck` | [0.1](0.1-foundation.md#the-justfile) |
 | Goroutines | [1.8](1.8-in-memory-store.md#goroutines) |
 | Graceful shutdown, `Shutdown` vs `Close` | [3.1](3.1-serve.md#graceful-shutdown) |
 | Guarded `UPDATE`, `:execrows`, `RowsAffected` | [2.5](2.5-booking-store.md#checking-and-writing-in-one-statement), [2.6](2.6-cancel-and-delete.md#cancelling-one-more-guarded-update) |

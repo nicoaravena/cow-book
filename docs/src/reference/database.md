@@ -17,15 +17,15 @@ Postgres 18, one database for every operator, one schema per operator. So far on
 
 | Make target | Does |
 | --- | --- |
-| `make db-up` | Start Postgres and wait until it is healthy |
-| `make db-down` | Stop it; data stays in the `pgdata` volume |
-| `make db-psql` | Open `psql` inside the container |
-| `make migrate-platform` | Apply `migrations/platform` and print the status |
-| `make migrate-check` | Up, reset, up for `migrations/platform`, in a throwaway `cowbook_migrate_check` database: proves every Down migration works. Tenant migrations get the same check in `TestTenantMigrationsDownAndUp` |
-| `make test-integration` | Tests tagged `integration`, against `DATABASE_URL` |
-| `make generate` | Regenerates `internal/postgres/tenantdb` with sqlc. `make lint` runs `sqlc diff` and fails while it is stale |
-| `make create-tenant SLUG=... NAME=...` | Runs `cowbook create-tenant` with `.env` loaded |
-| `make migrate-tenant TENANT=tenant_<id>` | Applies new `migrations/tenant` versions to one existing tenant; exit 2 on a bad name |
+| `just db-up` | Start Postgres and wait until it is healthy |
+| `just db-down` | Stop it; data stays in the `pgdata` volume |
+| `just db-psql` | Open `psql` inside the container |
+| `just migrate-platform` | Apply `migrations/platform` and print the status |
+| `just migrate-check` | Up, reset, up for `migrations/platform`, in a throwaway `cowbook_migrate_check` database: proves every Down migration works. Tenant migrations get the same check in `TestTenantMigrationsDownAndUp` |
+| `just test-integration` | Tests tagged `integration`, against `DATABASE_URL` |
+| `just generate` | Regenerates `internal/postgres/tenantdb` with sqlc. `just lint` runs `sqlc diff` and fails while it is stale |
+| `just create-tenant SLUG=... NAME=...` | Runs `cowbook create-tenant` with `.env` loaded |
+| `just migrate-tenant TENANT=tenant_<id>` | Applies new `migrations/tenant` versions to one existing tenant; exit 2 on a bad name |
 
 ## Schemas
 

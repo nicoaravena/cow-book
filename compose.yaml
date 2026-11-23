@@ -1,5 +1,5 @@
 # Local Postgres for development and integration tests. Start it with
-# `make db-up`; the password comes from .env (see .env.example).
+# `just db-up`; the password comes from .env (see .env.example).
 services:
   db:
     image: postgres:18

@@ -7,9 +7,9 @@ max_line_length = 88
 end_of_line = lf
 charset = utf-8
 
-[Makefile]
-indent_style = tab
-indent_size = 2
+[justfile]
+indent_style = space
+indent_size = 4
 
 [*.{go,mod}]
 indent_style = tab

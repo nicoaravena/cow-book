@@ -1,7 +1,7 @@
 -- Step 2.2: a tenant schema's tables accept good rows and refuse bad ones.
 -- Create a tenant first, then pass its schema as the tenant variable:
 --
---   make create-tenant SLUG=north-hub NAME="North Hub"
+--   just create-tenant SLUG=north-hub NAME="North Hub"
 --   docker compose exec -T db psql -U cowbook -d cowbook -v tenant=tenant_1 < examples/2.2-tenant.sql
 --
 -- Like 2.1, everything is rolled back at the end.

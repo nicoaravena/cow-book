@@ -1,5 +1,5 @@
 -- Step 2.1: the tenants table accepts a good row and refuses bad ones.
--- Run against the compose database after `make migrate-platform`:
+-- Run against the compose database after `just migrate-platform`:
 --
 --   docker compose exec -T db psql -U cowbook -d cowbook < examples/2.1-tenants.sql
 --

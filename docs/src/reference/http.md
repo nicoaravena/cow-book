@@ -4,7 +4,7 @@
 Every M3 step adds routes here. See [3.1](../concepts/3.1-serve.md) for how it's built.
 
 ```sh
-make serve                     # go run ./cmd/cowbook serve, with .env loaded
+just serve                     # go run ./cmd/cowbook serve, with .env loaded
 go run ./cmd/cowbook serve -h  # lists the variables below
 ```
 

@@ -103,7 +103,7 @@ func TestBookingConstraints(t *testing.T) {
 }
 
 // TestTenantMigrationsDownAndUp takes a tenant schema all the way down and up
-// again, which proves every tenant Down section works. make migrate-check only
+// again, which proves every tenant Down section works. just migrate-check only
 // covers the platform migrations.
 func TestTenantMigrationsDownAndUp(t *testing.T) {
 	pool := testPool(t)

@@ -17,9 +17,9 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 ### Checks
 
-- Every step: `make test` and `make lint` (`go vet`, `gofmt -l`, `staticcheck`), and `make docs` builds with no warnings.
+- Every step: `just test` and `just lint` (`go vet`, `gofmt -l`, `staticcheck`), and `just docs` builds with no warnings.
 - Every step from 1.9: its runnable result works through `cmd/cowbook`.
-- From M2: `make migrate-check`, and `make test-integration` from 2.2, where the first integration test arrives.
+- From M2: `just migrate-check`, and `just test-integration` from 2.2, where the first integration test arrives.
 - From M3: exercise the running server with `curl`, with commands given in each step.
 - At the end: the 7.7 run-through in a browser, and a checklist mapping each README rule to the test that proves it.
 
@@ -27,7 +27,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 ### M0: Foundation
 
-- [x] **0.1** Git repo, `.gitignore`, Makefile (`test`, `lint`), replace the broken tests.
+- [x] **0.1** Git repo, `.gitignore`, justfile (`test`, `lint`), replace the broken tests.
 
 ### M1: Domain rules, no database
 
@@ -48,7 +48,7 @@ Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for
 
 - [x] **2.1** `compose.yaml`, goose, platform migration: `tenants` and the `shared` schema. *Go: `go tool` directive.*
 - [x] **2.2** Tenant migration (locations, spaces, members) and a provisioning function that creates `tenant_<id>` and migrates it, with cleanup on failure. Must confirm goose works per schema (see [Database roles](#database-roles)). *Go: `embed`, `database/sql` vs pgx, `pgx.Identifier`.* Brought `cowbook create-tenant <slug> <name>` forward from 3.2 as the runnable result.
-- [x] **2.3** Bookings tenant migration with the exclusion constraint, shown working with raw SQL. Also stores who made the booking, the approval deadline and the approval time. The constraint ignores only cancelled rows, so pending bookings hold their slot. Added `make migrate-tenant TENANT=tenant_<id>` so existing tenants get the new version.
+- [x] **2.3** Bookings tenant migration with the exclusion constraint, shown working with raw SQL. Also stores who made the booking, the approval deadline and the approval time. The constraint ignores only cancelled rows, so pending bookings hold their slot. Added `just migrate-tenant TENANT=tenant_<id>` so existing tenants get the new version.
 - [x] **2.4** sqlc setup, pgx pool with query mode `describe_exec`, `WithTenant` transaction wrapper. Tests prove `search_path` doesn't carry over on a reused connection (after a commit, an error and a panic), and show why the default `cache_statement` mode fails across tenants on different schema versions. Split from the space store, now 2.4b. *Go: closures for transaction scope, `defer` with rollback, generated code, build tags.*
 - [x] **2.4b** Space store: a `cowbook` function that rebuilds a `Space` from stored values, and accessors for its location, hours, availability and timestamps. `GetSpace` with its location's timezone and opening windows, plus create and list, all through `WithTenant`. Integration tests. *Go: mapping rows to domain types.*
 - [x] **2.5** Booking store: `23P01` maps to `ErrSlotTaken`. Same contract tests as the in-memory store, then many goroutines racing for one slot. Lazy expiry: in the same transaction, `CreateBooking` first cancels lapsed pending bookings that overlap the new one, because a constraint can't use `now()`; approving checks the deadline the same way. *Go: `errors.As`, subtests, shared test helpers.* Has `CreateBooking`, `GetBooking` and `SaveApproval`; `SaveCancellation` and `ListMemberBookingsEndingAfter` move to 2.6.
@@ -59,7 +59,7 @@ Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for
 
 Runnable: 3.1-3.2 add the `serve`, `migrate` and `create-tenant` subcommands, the server exercised with `curl`. From 3.3 `cowbook repl` takes `-server http://localhost:8080` and talks to the running server. Its commands go through a small `Backend` interface with an in-process and an HTTP implementation, and each new endpoint gets a REPL command. Whether in-process mode stays is decided at 3.3.
 
-- [x] **3.1** `cowbook serve`: config from env, `slog`, `/healthz`, graceful shutdown. *Go: `signal.NotifyContext`, `http.Server`.* `/healthz` pings Postgres (decided by the user). Routes in `internal/httpapi` on the stdlib `ServeMux` until chi in 3.3; the run loop in `internal/server`; `make serve`.
+- [x] **3.1** `cowbook serve`: config from env, `slog`, `/healthz`, graceful shutdown. *Go: `signal.NotifyContext`, `http.Server`.* `/healthz` pings Postgres (decided by the user). Routes in `internal/httpapi` on the stdlib `ServeMux` until chi in 3.3; the run loop in `internal/server`; `just serve`.
 - [ ] **3.2** `cowbook migrate` subcommand for local use, and `create-tenant` (added in 2.2) moves with it; dispatch moves from a `switch` on `os.Args` to `flag`. *Go: `flag`, `flag.NewFlagSet` per subcommand, exit codes.*
 - [ ] **3.3** chi, tenant middleware, `GET spaces`, JSON helpers. *Go: handlers, middleware as function wrapping, `httptest`.*
 - [ ] **3.4** Availability for a space and date.
@@ -186,12 +186,12 @@ Agent's calls, open to rejection:
 - **`booked_by` without a foreign key (2.3):** the staff table arrives in M4, which adds it.
 - **Booking references don't cascade (2.3):** a space or member with bookings can't be deleted, so history stays. Members are soft-deleted.
 - **Approval columns checked in the table (2.3):** `booked_by` and `approval_deadline` are set together, and `approved_at` needs a deadline. Capacity, length and opening hours stay in `NewBooking`.
-- **`make migrate-check` in a throwaway database (2.3):** its `reset` used to run in the dev database, where it would drop `platform.tenants` with every tenant row. From 2.3 tenant constraints depend on `btree_gist`, so it failed there instead. It now creates, checks and drops `cowbook_migrate_check`.
-- **`make migrate-tenant` (2.3):** migrates one existing tenant with goose, `search_path` passed in the URL. A stopgap until 5.5 migrates every tenant.
+- **`just migrate-check` in a throwaway database (2.3):** its `reset` used to run in the dev database, where it would drop `platform.tenants` with every tenant row. From 2.3 tenant constraints depend on `btree_gist`, so it failed there instead. It now creates, checks and drops `cowbook_migrate_check`.
+- **`just migrate-tenant` (2.3):** migrates one existing tenant with goose, `search_path` passed in the URL. A stopgap until 5.5 migrates every tenant.
 - **Query mode `describe_exec` (2.4):** `NewPool` sets it, because pgx's default `cache_statement` fails with `cached plan must not change result type` when tenants on different migration versions share a connection, as during 5.5. Cost: two round trips per query. `exec` (one round trip, parameter types taken from Go values) is the fallback if latency matters.
 - **`WithTenant` takes a closure (2.4):** `fn(q *tenantdb.Queries) error`, so callers never hold the transaction and can't forget to commit, roll back or set the path. Results leave through variables the closure captures.
 - **`set_config('search_path', $1, true)` (2.4):** transaction-local like `SET LOCAL`, and the path is a parameter rather than SQL text.
-- **Generated code committed (2.4):** `go build` needs neither sqlc nor cgo; `make lint` runs `sqlc diff` so it can't fall behind.
+- **Generated code committed (2.4):** `go build` needs neither sqlc nor cgo; `just lint` runs `sqlc diff` so it can't fall behind.
 - **Step names 2.4b and 2.7 (2.4):** not renumbering 2.5 and 2.6 keeps about 20 forward references in earlier pages and comments correct.
 - **`RestoreSpace` goes through `NewSpace` (2.4b):** a stored row is checked by the same rules as a new space, so a row changed by hand into something the domain refuses fails on read. Cost: if a rule tightens, old rows stop loading until a migration fixes them.
 - **`SpaceRecord` embeds `SpaceParams` (2.4b):** the record is the params plus what a store keeps, rather than a long parameter list. The same shape should fit `Booking` in 2.5.
@@ -256,7 +256,7 @@ internal/server/         runs a handler until a signal, then shuts down graceful
 internal/web/            HTML pages at /o/{slug}/..., embedded templates
 migrations/platform/     goose SQL, run once: tenants, support users, audit log
 migrations/tenant/       goose SQL, run in every tenant schema
-compose.yaml, Makefile, sqlc.yaml
+compose.yaml, justfile, sqlc.yaml
 ```
 
 ### Domain model
@@ -298,7 +298,7 @@ sqlc queries use unqualified table names, generated from `migrations/tenant/`. g
 ### Testing
 
 - `go test ./...`: fast unit tests, no database.
-- `make test-integration`: `-tags integration` against Postgres in compose, using `-race`. Includes the concurrent-booking test and the isolation suite.
+- `just test-integration`: `-tags integration` against Postgres in compose, using `-race`. Includes the concurrent-booking test and the isolation suite.
 - CLI exit codes: `0` ok, `1` general error, `2` usage error.
 
 ### Dependencies

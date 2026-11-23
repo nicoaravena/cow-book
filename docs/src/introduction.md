@@ -31,8 +31,8 @@ cargo install mdbook --locked
 Then, from the repository root:
 
 ```sh
-make docs         # build into book/
-make docs-serve   # serve with live reload and open a browser
+just docs         # build into book/
+just docs-serve   # serve with live reload and open a browser
 ```
 
 `book/` is build output and is not committed.

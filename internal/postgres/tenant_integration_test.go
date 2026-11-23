@@ -19,7 +19,7 @@ import (
 )
 
 // testPool connects to DATABASE_URL, the compose database with the platform
-// migration applied (make db-up migrate-platform), the way the app does.
+// migration applied (just db-up migrate-platform), the way the app does.
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")

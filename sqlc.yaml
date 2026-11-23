@@ -1,5 +1,5 @@
 # sqlc generates typed Go for the SQL in internal/postgres/queries, checked
-# against the tenant migrations. Run make generate after changing either; make
+# against the tenant migrations. Run just generate after changing either; just
 # lint fails while the generated code is stale.
 version: "2"
 sql:
