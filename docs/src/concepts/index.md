@@ -15,10 +15,13 @@ Each topic links to the steps where it shows up.
 | Compile-time interface checks (`var _ I = (*T)(nil)`) | [1.8](1.8-in-memory-store.md#compile-time-interface-checks), [2.4b](2.4b-space-store.md#a-store-bound-to-one-tenant), [2.7](2.7-repl-on-postgres.md#struct-embedding-three-stores-as-one-value) |
 | Compose, volumes, healthchecks | [2.1](2.1-postgres-and-migrations.md#compose) |
 | Connection pools (`pgxpool`), reused connections | [2.4](2.4-sqlc-and-withtenant.md#a-pool-and-why-connections-get-reused) |
-| Composition root (`main` wires dependencies) | [1.9](1.9-repl.md#a-delivery-adapter), [2.7](2.7-repl-on-postgres.md#interfaces-made-of-interfaces) |
+| Composition root (`main` wires dependencies) | [1.9](1.9-repl.md#a-delivery-adapter), [2.7](2.7-repl-on-postgres.md#interfaces-made-of-interfaces), [3.1](3.1-serve.md#shutting-down-in-order) |
+| Config from the environment, injected `getenv` | [3.1](3.1-serve.md#config-from-the-environment) |
 | Constructors (`NewX`) and params structs | [1.1](1.1-space.md#constructors) |
+| `context.AfterFunc`, a second Ctrl-C | [3.1](3.1-serve.md#signals-signalnotifycontext) |
 | `context.Context` | [1.5](1.5-services-and-stores.md#contextcontext) |
-| `context.WithoutCancel` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure), [2.4](2.4-sqlc-and-withtenant.md#defer-and-rolling-back) |
+| `context.WithoutCancel` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure), [2.4](2.4-sqlc-and-withtenant.md#defer-and-rolling-back), [3.1](3.1-serve.md#graceful-shutdown) |
+| `context.WithTimeout`, deadlines on a request's context | [3.1](3.1-serve.md#the-health-check) |
 | Data races and `go test -race` | [1.8](1.8-in-memory-store.md#the-race-detector) |
 | Deadlocks and lock order | [2.6](2.6-cancel-and-delete.md#lock-order-and-deadlocks) |
 | `database/sql` vs pgx, `stdlib.OpenDB` | [2.2](2.2-tenant-schemas.md#databasesql-and-pgx) |
@@ -36,19 +39,25 @@ Each topic links to the steps where it shows up.
 | `errors.Is` | [1.3](1.3-booking-rules.md#errorsis), [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
 | `errors.Join` | [2.2](2.2-tenant-schemas.md#cleaning-up-after-a-failure) |
 | Exclusion constraints, GiST, `btree_gist` | [2.3](2.3-bookings.md#exclusion-constraints) |
-| Exit codes for a CLI | [2.7](2.7-repl-on-postgres.md#flags-for-one-subcommand-flagnewflagset) |
+| Exit codes for a CLI | [2.7](2.7-repl-on-postgres.md#flags-for-one-subcommand-flagnewflagset), [3.1](3.1-serve.md#exit-codes) |
 | Exported vs unexported names | [1.1](1.1-space.md#exported-and-unexported-names) |
-| `flag`, `flag.NewFlagSet` per subcommand | [2.7](2.7-repl-on-postgres.md#flags-for-one-subcommand-flagnewflagset) |
+| `flag`, `flag.NewFlagSet` per subcommand | [2.7](2.7-repl-on-postgres.md#flags-for-one-subcommand-flagnewflagset), [3.1](3.1-serve.md#exit-codes) |
 | `fstest.MapFS` | [2.2](2.2-tenant-schemas.md#faking-a-file-system-with-fstestmapfs) |
-| Functions as values | [1.5](1.5-services-and-stores.md#dependency-injection-including-the-clock) |
+| Functions as values | [1.5](1.5-services-and-stores.md#dependency-injection-including-the-clock), [3.1](3.1-serve.md#config-from-the-environment) |
 | Generated code (sqlc, `DO NOT EDIT`) | [2.4](2.4-sqlc-and-withtenant.md#generated-code-with-sqlc) |
 | `go tool` dependencies | [0.1](0.1-foundation.md#go-tool-dependencies), [2.1](2.1-postgres-and-migrations.md#go-tool-again) |
 | `go vet`, `gofmt`, `staticcheck` | [0.1](0.1-foundation.md#the-makefile) |
 | Goroutines | [1.8](1.8-in-memory-store.md#goroutines) |
+| Graceful shutdown, `Shutdown` vs `Close` | [3.1](3.1-serve.md#graceful-shutdown) |
 | Guarded `UPDATE`, `:execrows`, `RowsAffected` | [2.5](2.5-booking-store.md#checking-and-writing-in-one-statement), [2.6](2.6-cancel-and-delete.md#cancelling-one-more-guarded-update) |
+| Health checks, liveness vs readiness | [3.1](3.1-serve.md#the-health-check) |
+| `http.Handler`, `http.HandlerFunc`, handlers returned by functions | [3.1](3.1-serve.md#the-health-check) |
+| `http.Server` timeouts, slowloris | [3.1](3.1-serve.md#httpserver-and-its-timeouts) |
+| `http.ServeMux` method patterns (Go 1.22), 404 and 405 | [3.1](3.1-serve.md#routes-with-methods-in-httpservemux) |
+| `httptest`: `NewRequest`, `NewRecorder` | [3.1](3.1-serve.md#testing-a-server-httptest-and-a-real-listener) |
 | Identity columns, sequence gaps | [2.1](2.1-postgres-and-migrations.md#identity-columns) |
 | Implicit interfaces | [1.5](1.5-services-and-stores.md#implicit-interfaces) |
-| Interfaces defined by the consumer | [1.5](1.5-services-and-stores.md#implicit-interfaces), [2.7](2.7-repl-on-postgres.md#interfaces-defined-by-the-consumer) |
+| Interfaces defined by the consumer | [1.5](1.5-services-and-stores.md#implicit-interfaces), [2.7](2.7-repl-on-postgres.md#interfaces-defined-by-the-consumer), [3.1](3.1-serve.md#the-health-check) |
 | Instants vs wall-clock time, `Time.In` | [1.2](1.2-opening-hours.md#instants-vs-wall-clock) |
 | Integer conversions (`int32(x)`), wrap-around | [2.4b](2.4b-space-store.md#mapping-rows-to-domain-types) |
 | Isolation levels, READ COMMITTED re-checks, row locks | [2.5](2.5-booking-store.md#many-at-once), [2.6](2.6-cancel-and-delete.md#what-the-waiting-side-sees) |
@@ -57,6 +66,8 @@ Each topic links to the steps where it shows up.
 | `iota` enums with a safe zero value | [1.4](1.4-members-and-actors.md#small-enums-with-iota) |
 | Lazy expiry, conditions a constraint can't hold | [2.5](2.5-booking-store.md#lazy-expiry) |
 | Lining up columns (`text/tabwriter`, `Flush`) | [1.10](1.10-repl-catches-up.md#lining-up-columns-with-texttabwriter) |
+| Listening on port 0, `net.Listener` | [3.1](3.1-serve.md#listening-on-port-0) |
+| `log/slog`, structured logs, levels | [3.1](3.1-serve.md#structured-logs-with-logslog) |
 | Logic races vs data races | [1.8](1.8-in-memory-store.md#the-race-detector) |
 | Loop variables per iteration (Go 1.22) | [1.8](1.8-in-memory-store.md#goroutines) |
 | Map iteration order | [1.9](1.9-repl.md#a-map-of-command-functions), [1.10](1.10-repl-catches-up.md#map-order-and-slicessortfunc) |
@@ -82,6 +93,7 @@ Each topic links to the steps where it shows up.
 | Saving a batch all or nothing | [1.7](1.7-deleting-a-member.md#a-batch-saved-all-or-nothing), [2.6](2.6-cancel-and-delete.md#transactions-spanning-several-queries) |
 | `search_path` and `current_schema()` | [2.2](2.2-tenant-schemas.md#one-goose-table-per-schema) |
 | Sentinel errors | [1.1](1.1-space.md#sentinel-errors), [1.9](1.9-repl.md#errors-for-control-flow) |
+| Signals, `signal.NotifyContext`, inherited dispositions | [3.1](3.1-serve.md#signals-signalnotifycontext) |
 | Soft delete | [1.4](1.4-members-and-actors.md#soft-delete), [1.7](1.7-deleting-a-member.md) |
 | Sorting with `slices.SortFunc` and `cmp.Compare` | [1.10](1.10-repl-catches-up.md#map-order-and-slicessortfunc) |
 | Splitting strings (`Fields`, `Cut`, `SplitSeq`) | [1.9](1.9-repl.md#splitting-words) |
@@ -92,11 +104,11 @@ Each topic links to the steps where it shows up.
 | `sync.WaitGroup` and `wg.Go` | [1.8](1.8-in-memory-store.md#goroutines) |
 | Table-driven tests and subtests (`t.Run`) | [1.1](1.1-space.md#table-driven-tests), [2.5](2.5-booking-store.md#subtests-and-shared-test-helpers) |
 | Terminal detection (`os.ModeCharDevice`) | [1.9](1.9-repl.md#terminal-or-script) |
-| Test fakes | [1.5](1.5-services-and-stores.md#implicit-interfaces) |
+| Test fakes | [1.5](1.5-services-and-stores.md#implicit-interfaces), [3.1](3.1-serve.md#the-health-check) |
 | Testing an order of events (`pg_blocking_pids`, held transactions) | [2.6](2.6-cancel-and-delete.md#testing-an-order-of-events) |
 | Test helpers (`t.Helper`) | [1.2](1.2-opening-hours.md#test-helpers), [2.5](2.5-booking-store.md#subtests-and-shared-test-helpers) |
 | Tests, `t.Errorf` vs `t.Fatalf` | [0.1](0.1-foundation.md#tests) |
-| Tests that can fail: removing the guard | [2.6](2.6-cancel-and-delete.md#proving-the-tests-can-fail) |
+| Tests that can fail: removing the guard | [2.6](2.6-cancel-and-delete.md#proving-the-tests-can-fail), [3.1](3.1-serve.md#testing-a-server-httptest-and-a-real-listener) |
 | Time layouts, `time.Parse`, `time.Date` normalizing | [1.9](1.9-repl.md#parsing-times) |
 | Timestamp precision, Go nanoseconds vs Postgres microseconds | [2.4b](2.4b-space-store.md#timestamps-lose-their-nanoseconds), [2.5](2.5-booking-store.md#comparing-bookings) |
 | Transaction-local settings (`set_config`, `SET LOCAL`) | [2.4](2.4-sqlc-and-withtenant.md#settings-that-end-with-the-transaction) |

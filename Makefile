@@ -1,4 +1,4 @@
-.PHONY: test test-integration lint generate docs docs-serve fetch-catppuccin db-up db-down db-psql migrate-platform migrate-check migrate-tenant create-tenant
+.PHONY: test test-integration lint generate docs docs-serve fetch-catppuccin db-up db-down db-psql migrate-platform migrate-check migrate-tenant create-tenant serve
 
 # .env is optional: test, lint and docs don't need it. Its variables are
 # exported to every recipe, so goose sees DATABASE_URL.
@@ -78,3 +78,8 @@ migrate-tenant:
 # make create-tenant SLUG=north-hub NAME="North Hub"
 create-tenant:
 	go run ./cmd/cowbook create-tenant "$(SLUG)" "$(NAME)"
+
+# The HTTP API on COWBOOK_ADDR (default localhost:8080) until Ctrl-C. Needs the
+# compose database: make db-up migrate-platform.
+serve:
+	go run ./cmd/cowbook serve

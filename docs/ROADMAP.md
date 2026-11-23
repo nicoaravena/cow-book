@@ -4,7 +4,7 @@ This project exists mainly to **learn Go**. The vehicle is the multi-tenant cowo
 
 **Finish line:** every README rule works through an HTTP API plus simple web pages, running locally with `cowbook serve`.
 
-**Next up:** step 3.1.
+**Next up:** step 3.2.
 
 ## How to work
 
@@ -59,7 +59,7 @@ Runnable: 2.1-2.3 give a SQL script for `psql` against the compose database (for
 
 Runnable: 3.1-3.2 add the `serve`, `migrate` and `create-tenant` subcommands, the server exercised with `curl`. From 3.3 `cowbook repl` takes `-server http://localhost:8080` and talks to the running server. Its commands go through a small `Backend` interface with an in-process and an HTTP implementation, and each new endpoint gets a REPL command. Whether in-process mode stays is decided at 3.3.
 
-- [ ] **3.1** `cowbook serve`: config from env, `slog`, `/healthz`, graceful shutdown. *Go: `signal.NotifyContext`, `http.Server`.*
+- [x] **3.1** `cowbook serve`: config from env, `slog`, `/healthz`, graceful shutdown. *Go: `signal.NotifyContext`, `http.Server`.* `/healthz` pings Postgres (decided by the user). Routes in `internal/httpapi` on the stdlib `ServeMux` until chi in 3.3; the run loop in `internal/server`; `make serve`.
 - [ ] **3.2** `cowbook migrate` subcommand for local use, and `create-tenant` (added in 2.2) moves with it; dispatch moves from a `switch` on `os.Args` to `flag`. *Go: `flag`, `flag.NewFlagSet` per subcommand, exit codes.*
 - [ ] **3.3** chi, tenant middleware, `GET spaces`, JSON helpers. *Go: handlers, middleware as function wrapping, `httptest`.*
 - [ ] **3.4** Availability for a space and date.
@@ -218,6 +218,16 @@ Agent's calls, open to rejection:
 - **`ErrEmailTaken` in `cowbook` (2.7):** a store error beside `ErrMemberNotFound`. Postgres maps `23505` on `members_email_key`; memstore checks under its mutex. The REPL calls `NewMember` then the store, as for spaces; a `MemberService.Create` waits for 3.7.
 - **`LookupTenant` opens `active` tenants only (2.7):** a `provisioning` one may have no schema, a `suspended` one must stay blocked. `ErrTenantNotFound` lives in `postgres`, since there is no `Tenant` domain type yet.
 - **`flag` for `repl` now (2.7):** `flag.NewFlagSet("repl", ContinueOnError)`; bad flags exit 2, `-h` exits 0. The `switch` on `os.Args[1]` and the other subcommands move in 3.2.
+- **Stdlib `ServeMux` until 3.3 (3.1):** one route doesn't need chi; Go 1.22 method patterns give 405 and 404 for free. chi arrives in 3.3 as planned, with the tenant routes and middleware.
+- **`/healthz` at the root, pinging Postgres (3.1):** platform-level, no tenant. 200 or 503 within a 2 s ping timeout; the reason goes to the log only, never the body. Rejected: a liveness-only check, and separate `/healthz` and `/readyz`.
+- **Fail fast at startup (3.1):** `serve` pings once before listening, so a wrong `DATABASE_URL` or a stopped database exits 1 instead of serving 503s.
+- **`localhost:8080` by default (3.1):** not `:8080`, which listens on every interface; nothing is fit for a network before login (M4) and database roles (5.1).
+- **Config read through an injected `getenv` (3.1):** `loadServeConfig(os.Getenv)` in the binary, a map in the tests. Three variables: `DATABASE_URL`, `COWBOOK_ADDR`, `COWBOOK_LOG_LEVEL`. Timeouts are constants until something needs to change them.
+- **The composition root opens the listener (3.1):** `server.Run` takes a `net.Listener`, so tests use port 0 and the log shows the real address.
+- **`internal/server` apart from `internal/httpapi` (3.1):** the run loop serves whatever handler it's given, so the web pages (M7) share it without depending on the API package.
+- **Server timeouts set (3.1):** header 5 s, request 15 s, response 15 s, idle 60 s, against slow or idle clients holding connections. `ErrorLog` goes through `slog`.
+- **Second signal kills (3.1):** `context.AfterFunc(ctx, stop)` hands SIGINT and SIGTERM back to Go's default once shutdown starts. Shutdown waits 10 s, then `serve` exits 1. The pool closes after the server, by `defer` order.
+- **No request log yet (3.1):** middleware is 3.3's topic.
 
 ## How each README rule is enforced
 
@@ -241,7 +251,8 @@ Layering: delivery (`httpapi`, `web`, `main`) -> `cowbook` services -> `cowbook`
 cmd/cowbook/main.go      the one binary and composition root: repl, serve, migrate, ...
 cowbook/                 domain + services
 internal/postgres/       store implementations, sqlc output
-internal/httpapi/        JSON API at /api/o/{slug}/...
+internal/httpapi/        JSON API at /api/o/{slug}/..., plus /healthz
+internal/server/         runs a handler until a signal, then shuts down gracefully
 internal/web/            HTML pages at /o/{slug}/..., embedded templates
 migrations/platform/     goose SQL, run once: tenants, support users, audit log
 migrations/tenant/       goose SQL, run in every tenant schema
@@ -333,4 +344,7 @@ Already added: `staticcheck`, goose (v3.29.0) and sqlc (v1.31.1), as `go tool` e
 - **Exclusion constraint under contention:** Postgres checks the constraint after adding the index entry, so two conflicting inserts can in principle wait on each other and one end with a deadlock error (`40P01`) instead of `23P01`. Not seen in 120 runs of the 2.5 race tests on a 16-connection pool. If it appears, `CreateBooking` should retry the transaction once.
 - **REPL clock after a restart (2.7):** with `-store=postgres` the data stays but the clock starts again at 16 November 08:00. A booking made after `clock add 48h` is in the future again, and the next run's `clock add` may put earlier bookings in the past. `clock set` gets back. Decided by the user over the wall clock.
 - **`LocationFor` is REPL-only (2.7):** a find-or-create by timezone in both stores, for `space add`. Two sessions adding a new zone at once can both insert a row; harmless, since the lowest id wins. 3.7 replaces it with location management.
+- **`/healthz` is unauthenticated and hits the database (3.1):** one round trip per call, open to anyone who can reach the port. Fine on `localhost`; 5.4's rate limits would cover it if it's ever exposed.
+- **No request log until 3.3 (3.1):** while exercising the server with `curl`, only startup, shutdown and failed health checks show in the log.
+- **A second SIGINT in scripts (3.1):** a job started with `&` from a shell without job control begins with SIGINT ignored, and `stop` restores that, so in a script only a second SIGTERM kills. In a terminal the second Ctrl-C kills, as intended.
 - **Staff booking that starts right away:** its approval deadline is its start, which is now, so it can never be approved. It holds the slot until lazy expiry cancels it. Refusing staff bookings that start within some minimum lead time would fix it.

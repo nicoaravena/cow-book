@@ -4,6 +4,7 @@
 //	cowbook repl [-store=memory|postgres] [-tenant=<slug>]
 //	                                     a command prompt over the services and a store
 //	cowbook create-tenant <slug> <name>  add an operator with its own schema, in DATABASE_URL
+//	cowbook serve                        the HTTP API, configured from the environment
 //
 // Exit codes: 0 ok, 1 an error, 2 a usage error.
 package main
@@ -31,7 +32,9 @@ commands:
   repl [-store=memory|postgres] [-tenant=<slug>]
                                a command prompt over the services and a store;
                                postgres keeps the tenant's data in DATABASE_URL
-  create-tenant <slug> <name>  add an operator with its own schema, in DATABASE_URL`
+  create-tenant <slug> <name>  add an operator with its own schema, in DATABASE_URL
+  serve                        the HTTP API until Ctrl-C; cowbook serve -h lists
+                               its environment variables`
 
 // errUsage is returned for bad arguments, which exit with code 2. The message
 // has been printed already.
@@ -53,6 +56,8 @@ func main() {
 			os.Exit(2)
 		}
 		err = runCreateTenant(os.Args[2], os.Args[3])
+	case "serve":
+		err = runServe(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "cowbook: unknown command %q\n%s\n", os.Args[1], usage)
 		os.Exit(2)
