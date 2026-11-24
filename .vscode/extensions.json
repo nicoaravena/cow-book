@@ -1,0 +1,9 @@
+{
+    "recommendations": [
+        "editorconfig.editorconfig",
+        "tamasfe.even-better-toml",
+        "golang.go",
+        "foxundermoon.shell-format",
+        "nefrob.vscode-just-syntax"
+    ]
+}
